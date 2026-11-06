@@ -1,0 +1,7 @@
+# Jangan tampilkan daftar direktori.
+Options -Indexes
+
+# File skema/migrasi/dokumentasi/backup tidak boleh diunduh publik.
+<FilesMatch "(^\.env|\.(sql|md|bak|log|ini|env|yml|yaml)$)">
+    Require all denied
+</FilesMatch>

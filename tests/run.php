@@ -1,0 +1,36 @@
+<?php
+// Tes mandiri tanpa dependency. Jalankan: php tests/run.php
+require __DIR__ . '/../bootstrap.php';
+
+$failed = 0;
+$check = static function (string $name, bool $ok): void {
+    global $failed;
+    if (!$ok) {
+        $failed++;
+        echo "FAIL: {$name}\n";
+    } else {
+        echo "ok:   {$name}\n";
+    }
+};
+
+$check('e() meng-escape HTML', e('<script>"&\'') === '&lt;script&gt;&quot;&amp;&#039;');
+$check('ticket_code() format benar', (bool) preg_match('/^ACD-[0-9A-F]{6}$/', ticket_code()));
+$check('ticket_code() acak', ticket_code() !== ticket_code());
+$check('password < 8 ditolak', password_ok('1234567') === false);
+$check('password 8 diterima', password_ok('12345678') === true);
+$check('excel_cell() menetralkan formula', excel_cell('=1+1') === "'=1+1");
+$check('excel_cell() membiarkan teks biasa', excel_cell('Budi') === 'Budi');
+$check('excel_cell() menangkap formula ber-spasi', excel_cell('  =1+1') === "'  =1+1");
+$check('avatar lokal berupa data URI', str_starts_with(initials_avatar('Budi'), 'data:image/svg+xml;base64,'));
+$check('placeholder lokal berupa data URI', str_starts_with(placeholder_data_uri('Acara'), 'data:image/svg+xml;base64,'));
+$check('upload tanpa file mengembalikan null', upload_image(['error' => UPLOAD_ERR_NO_FILE], 'posters', 1000) === null);
+$check('csrf token 64 hex', (bool) preg_match('/^[0-9a-f]{64}$/', csrf_token()));
+$check('csrf_field berisi token', str_contains(csrf_field(), csrf_token()));
+
+$_GET = ['p' => 1, 'q' => ''];
+$check('list_page() default', list_page() === [1, 10, '']);
+$check('pagination_html() punya tautan halaman', str_contains(pagination_html(25, 1, 10), 'p=2'));
+$check('table_footer() menghitung rentang', str_contains(table_footer(25, 1, 10), 'Menampilkan 1–10 dari 25 data'));
+
+echo $failed === 0 ? "\nSemua tes lulus.\n" : "\n{$failed} tes gagal.\n";
+exit($failed === 0 ? 0 : 1);
