@@ -124,6 +124,23 @@ function password_ok(string $password): bool
     return strlen($password) >= 8;
 }
 
+/**
+ * Jendela check-in: hanya boleh pada hari H. Mengembalikan pesan error tanggal,
+ * atau null bila boleh check-in. Tanggal tidak valid dianggap jauh di masa depan.
+ */
+function checkin_window_error(string $tanggal, string $hariIni): ?string
+{
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+        return 'Check-in baru dibuka pada hari seminar.';
+    }
+    if ($tanggal > $hariIni) {
+        $ts = strtotime($tanggal);
+        $tampil = $ts !== false ? date('d M Y', $ts) : $tanggal;
+        return 'Check-in baru dibuka pada hari seminar (' . $tampil . ').';
+    }
+    return null;
+}
+
 /** Avatar lokal (SVG data URI) pengganti layanan pihak ketiga. */
 function initials_avatar(string $name): string
 {

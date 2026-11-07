@@ -61,6 +61,10 @@ function handleCheckin(mysqli $conn, string $kode): array
     if ($row['tanggal'] < date('Y-m-d')) {
         return ['warning', 'Jadwal seminar sudah lewat.'];
     }
+    $jendela = checkin_window_error((string) $row['tanggal'], date('Y-m-d'));
+    if ($jendela !== null) {
+        return ['warning', $jendela];
+    }
     if ($row['status_hadir'] === 'Hadir') {
         return ['warning', 'Tiket ini sudah pernah di-check-in sebelumnya.'];
     }

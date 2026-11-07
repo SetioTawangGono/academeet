@@ -18,6 +18,14 @@ $check('ticket_code() format benar', (bool) preg_match('/^ACD-[0-9A-F]{6}$/', ti
 $check('ticket_code() acak', ticket_code() !== ticket_code());
 $check('password < 8 ditolak', password_ok('1234567') === false);
 $check('password 8 diterima', password_ok('12345678') === true);
+
+// checkin_window_error(): kemarin boleh, hari ini boleh, besok ditolak, format salah ditolak.
+$hariIni = '2026-11-07';
+$check('checkin_window_error() kemarin = boleh', checkin_window_error('2026-11-06', $hariIni) === null);
+$check('checkin_window_error() hari ini = boleh', checkin_window_error($hariIni, $hariIni) === null);
+$check('checkin_window_error() besok = ditolak', checkin_window_error('2026-11-08', $hariIni) !== null);
+$check('checkin_window_error() besok menyebut tanggal', str_contains((string) checkin_window_error('2026-11-08', $hariIni), '08 Nov 2026'));
+$check('checkin_window_error() format salah = ditolak', checkin_window_error('besok', $hariIni) !== null);
 $check('excel_cell() menetralkan formula', excel_cell('=1+1') === "'=1+1");
 $check('excel_cell() membiarkan teks biasa', excel_cell('Budi') === 'Budi');
 $check('excel_cell() menangkap formula ber-spasi', excel_cell('  =1+1') === "'  =1+1");
