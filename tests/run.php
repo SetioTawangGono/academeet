@@ -229,6 +229,15 @@ foreach ($barisFisik as $b) {
 }
 $check('ICS pelipatan 75 oktet per baris fisik', $pelipatanOk);
 
+// Lipatan tidak boleh memotong karakter UTF-8 di tengah maupun loop tak maju.
+// Isi 74 byte ASCII lalu emoji 4-byte yang melewati batas 75.
+$acaraBatas = ['id_registrasi' => 1, 'judul' => str_repeat('a', 66) . '🔥🔥🔥🔥🔥🔥🔥🔥', 'tanggal' => '2026-11-20'];
+$icsBatas = buat_ics($acaraBatas, '2026-11-08 10:00:00');
+$check('ICS lipatan batas UTF-8 tetap UTF-8 valid', mb_check_encoding($icsBatas, 'UTF-8'));
+$cekBaris = true;
+foreach (explode("\r\n", rtrim($icsBatas, "\r\n")) as $b) { if (strlen($b) > 75) { $cekBaris = false; break; } }
+$check('ICS lipatan batas UTF-8 tiap baris <=75 oktet', $cekBaris);
+
 $check('ICS acara berjam start/end/vtimezone/valarm', str_contains($ics1, 'DTSTART;TZID=Asia/Jakarta:20261115T080000') && str_contains($ics1, 'DTEND;TZID=Asia/Jakarta:20261115T100000') && str_contains($ics1, 'BEGIN:VTIMEZONE') && str_contains($ics1, 'BEGIN:VALARM'));
 
 $acaraDenganSelesai = $acaraTes;

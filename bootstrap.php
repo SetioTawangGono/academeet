@@ -892,6 +892,10 @@ function ics_lipat_baris(string $baris): string
             while ($chunkLen > 0 && (ord($baris[$pos + $chunkLen]) & 0xC0) === 0x80) {
                 $chunkLen--;
             }
+            // Jangan biarkan satu chunk habis di tengah karakter (loop tak maju).
+            if ($chunkLen === 0) {
+                $chunkLen = min($max, $len - $pos);
+            }
         }
         if ($pos > 0) {
             $result .= "\r\n ";
