@@ -10,23 +10,28 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF**, QR dibuat d
 
 | File | Fungsi |
 |------|--------|
-| `bootstrap.php` | Fondasi bersama: session hardening, timezone, `e()`, CSRF, flash, `require_role()`, helper tiket/password/upload/pagination, validasi data diri (`validasi_data_diri()`, `prodi_terdaftar()`), jendela check-in, status efektif, header keamanan. |
-| `services.php` | Logika DB (transaksi): `batalkan_pendaftaran()`, `ubah_seminar()`. Dipanggil `mahasiswa.php`, `admin.php`, dan tes. |
-| `index.php` | Login (throttle 5 percobaan/15 menit, pesan generik, `session_regenerate_id`). |
+| `bootstrap.php` | Fondasi bersama: session hardening, timezone, `e()`, CSRF, flash, `require_role()`, helper tiket/password/upload/pagination, validasi data diri (`validasi_data_diri()`, `prodi_terdaftar()`), jendela check-in, status efektif, header keamanan, timeout sesi (`idle_timeout_seconds()`, `sesi_kedaluwarsa()`), kunci throttle (`throttle_key()`). |
+| `services.php` | Logika DB (transaksi): `batalkan_pendaftaran()`, `ubah_seminar()`, `buat_admin()`, throttle (`throttle_terlalu_banyak()`/`throttle_catat()`/`throttle_hapus()`), token reset (`buat_token_reset()`/`pakai_token_reset()`). Dipanggil `mahasiswa.php`, `admin.php`, `index.php`, `verifikasi.php`, `lupa_password.php`, `reset_password.php`, dan tes. |
+| `index.php` | Login (throttle DB 3 kunci + throttle sesi, pesan generik, `session_regenerate_id`, rehash password, waktu respons diseragamkan). |
 | `register.php` | Registrasi mahasiswa + validasi server + CSRF. |
 | `logout.php` | Hapus session & cookie, redirect ke login. |
 | `koneksi.php` | Koneksi MySQL via env (fallback `localhost`/`root`), charset `utf8mb4`. |
 | `admin.php` | Dashboard admin multi-halaman via `?page=`. |
 | `mahasiswa.php` | Portal mahasiswa: katalog, tiket, profil. |
+| `lupa_password.php` | F5: form permintaan tautan reset (respons generik, throttle per email/IP). |
+| `reset_password.php` | F5: halaman set password baru dari token (sekali pakai, 30 menit). |
+| `mailer.php` | F5: kirim email via PHPMailer (`kirim_email()`, `isi_email_reset()`), konfigurasi dari env SMTP. |
 | `sertifikat.php` | Preview & unduh sertifikat PDF (hanya jika `status_hadir='Hadir'`). |
-| `verifikasi.php` | Halaman publik verifikasi sertifikat berdasarkan kode tiket. |
+| `verifikasi.php` | Halaman publik verifikasi sertifikat berdasarkan kode tiket (throttle DB per IP + sesi). |
 | `export_excel.php` | Ekspor peserta per seminar ke `.xls` (admin-only). |
 | `fpdf.php` | Library FPDF. |
+| `vendor/phpmailer/` | PHPMailer 7.1.1 (vendored, lihat `vendor/phpmailer/README.md`). |
 | `database.sql` | Skema lengkap untuk instalasi baru (+ index & foreign key). |
 | `migrasi.sql` | Migrasi idempoten untuk database yang sudah berjalan. |
 | `tests/run.php` | Self-check helper tanpa dependency (`php tests/run.php`). |
-| `tests/run_db.php` | Tes fungsi DB `services.php`. **Hanya** untuk database bernama `*_test` (mis. `academeet_paketa_test`); menolak berjalan di DB lain. |
+| `tests/run_db.php` | Tes fungsi DB `services.php`. **Hanya** untuk database bernama `*_test` (mis. `academeet_paketb_test`); menolak berjalan di DB lain. |
 | `tools/tutup_seminar.php` | CLI: tandai seminar `Aktif` yang tanggalnya lewat menjadi `Selesai`. |
+| `tools/buat_admin.php` | CLI: buat akun admin (nama/email argumen/prompt, password prompt tersembunyi). |
 | `uploads/.htaccess` | Blokir eksekusi skrip & directory listing di folder upload. |
 
 ---
@@ -43,13 +48,16 @@ mysql -u root academeet < migrasi.sql
 
 > **Penting:** `migrasi.sql` mengawali dengan `USE academeet;`, jadi selalu menargetkan database live meski dijalankan dengan nama DB lain. Untuk menguji di database salinan, hapus baris `USE` pada salinan sementara lalu jalankan `mysql -D <nama_db_salinan> < salinan.sql`.
 
-Tabel: `users`, `pemateri`, `seminars`, `registrations`.
+Tabel: `users`, `pemateri`, `seminars`, `registrations`, `auth_throttle`, `password_resets`.
 
 Batasan penting:
 - `registrations` punya `UNIQUE (id_user, id_seminar)` — satu mahasiswa satu tiket per seminar.
 - `registrations.kode_tiket` unik, format `ACD-` + 6 hex acak.
 - `users.nim` punya `UNIQUE KEY uq_users_nim` (NIM kosong disimpan `NULL`, boleh banyak NULL).
-- Foreign key: registrasi → user/seminar (`ON DELETE CASCADE`), seminar → pemateri (`ON DELETE SET NULL`).
+- `users.auth_version` (INT, default 0) naik saat password berubah/direset; dipakai membatalkan sesi lama.
+- `auth_throttle` menyimpan percobaan (login/verifikasi/reset) sebagai `key_hash` SHA-256; baris >1 hari dibersihkan oportunistik (~1% request, tanpa cron).
+- `password_resets` menyimpan token reset sebagai SHA-256 (sekali pakai, 30 menit, satu aktif per user, FK ke `users` `ON DELETE CASCADE`).
+- Foreign key: registrasi → user/seminar (`ON DELETE CASCADE`), seminar → pemateri (`ON DELETE SET NULL`), password_resets → users (`ON DELETE CASCADE`).
 
 Kolom `kuota_total` (di `seminars`) menyimpan kuota awal/total; kolom `kuota` menyimpan sisa kursi. Migrasi mengisinya dengan `kuota + jumlah pendaftar`. Bila ada NIM ganda, migrasi menampilkan `PERINGATAN: NIM ganda, UNIQUE tidak ditambahkan` dan melewati pembuatan indeks unik (tanpa mengubah data NIM).
 
@@ -64,19 +72,37 @@ Kolom `kuota_total` (di `seminars`) menyimpan kuota awal/total; kolom `kuota` me
 | `ACADEMEET_DB_PASS` | *(kosong)* |
 | `ACADEMEET_DB_NAME` | `academeet` |
 
+### Environment lain
+
+| Env | Default | Fungsi |
+|-----|---------|--------|
+| `ACADEMEET_IDLE_ADMIN_MIN` | `60` | Timeout tidak aktif sesi admin (menit). |
+| `ACADEMEET_IDLE_USER_MIN` | `240` | Timeout tidak aktif sesi mahasiswa (menit). |
+| `ACADEMEET_BASE_URL` | *(wajib untuk F5)* | Basis URL absolut untuk tautan reset (mis. `http://localhost/academeet`). Tautan **tidak** dibangun dari header `Host`. |
+| `ACADEMEET_SMTP_HOST` | *(wajib untuk F5)* | Host SMTP (mis. `sandbox.smtp.mailtrap.io`). |
+| `ACADEMEET_SMTP_PORT` | `587` | Port SMTP. |
+| `ACADEMEET_SMTP_SECURE` | `tls` | Enkripsi: `tls` / `ssl` / *(kosong)*. |
+| `ACADEMEET_SMTP_USER` | *(kosong)* | Username SMTP (kosong = tanpa auth). |
+| `ACADEMEET_SMTP_PASS` | *(kosong)* | Password SMTP. **Jangan** di-commit. |
+| `ACADEMEET_SMTP_FROM` | *(wajib untuk F5)* | Alamat pengirim. |
+
+Bila `ACADEMEET_BASE_URL` atau SMTP belum diset, `kirim_email()` gagal dengan `error_log` (tanpa isi email) dan halaman tetap menampilkan respons generik.
+
 ---
 
 ## 🔐 Keamanan
 
-- Password `password_hash()` / `password_verify()`; password baru minimal 8 karakter.
+- Password `password_hash()` / `password_verify()`; password mahasiswa minimal 8 karakter, password admin minimal 12. Login sukses menjalankan `password_needs_rehash()`.
 - Semua mutasi memakai **POST + token CSRF** (`csrf_field()` / `csrf_check()`); GET hanya untuk membaca.
 - Query memakai **prepared statement**; output di-escape dengan `e()`.
-- Login di-throttle dan memakai pesan error generik.
-- Session cookie `HttpOnly`, `SameSite=Lax`, `Secure` saat HTTPS; ID sesi diganti setelah login.
+- **Throttle di database** (`auth_throttle`, jendela geser 15 menit): login dibatasi per (email+IP) 5, per IP 30, per email global 20; verifikasi tiket 10 per IP; permintaan reset 3 per email & 10 per IP per jam. Kunci disimpan sebagai SHA-256; IP diambil dari `REMOTE_ADDR` (tidak mempercayai `X-Forwarded-For`). Throttle sesi lama tetap dipakai sebagai lapis kedua; bila query DB gagal, sistem `error_log` lalu jatuh ke throttle sesi.
+- **Sesi**: cookie `HttpOnly`, `SameSite=Lax`, `Secure` saat HTTPS; ID diganti setelah login; timeout tidak aktif (admin 60 menit, mahasiswa 240 menit) dengan `session.gc_maxlifetime` diset ke batas terpanjang.
+- **Pembatalan sesi**: `users.auth_version` disimpan di sesi saat login dan dicek `require_role()` tiap request; naik saat ganti password sendiri, reset oleh admin, atau reset via token. Akun yang dihapus langsung tak berlaku.
 - Upload divalidasi dari isi file (`getimagesize`) dan ukuran, nama file di-random; folder `uploads/` diblokir dari eksekusi skrip lewat `.htaccess`.
   - Catatan deployment: proteksi ini butuh Apache dengan `AllowOverride` yang mengizinkan `.htaccess`. Di nginx atau `AllowOverride None`, nonaktifkan eksekusi PHP untuk folder `uploads/` di konfigurasi server.
 - Export Excel menetralkan formula injection (`excel_cell()`).
 - QR tiket dirender di browser (kode tiket tidak dikirim ke layanan pihak ketiga); avatar/placeholder dibuat lokal.
+- **F5 lupa password**: token 32 byte acak, disimpan SHA-256, berlaku 30 menit, sekali pakai, satu aktif per user, hanya untuk role mahasiswa. Respons permintaan selalu sama (anti enumerasi email) dan waktu respons diseragamkan. Tautan dibangun dari `ACADEMEET_BASE_URL`, bukan header `Host`; halaman reset mengirim `Referrer-Policy: no-referrer` dan `Cache-Control: no-store`; tautan tidak pernah ditulis ke log.
 - **Header keamanan HTTP** dikirim sekali di `bootstrap.php`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()`, `Strict-Transport-Security` (hanya HTTPS), dan `Content-Security-Policy` (`default-src 'self'`; `script-src`/`style-src`/`font-src` mengizinkan `'unsafe-inline'` + `https://cdn.jsdelivr.net`; `img-src 'self' data: blob:`; `object-src 'none'`; `frame-ancestors 'self'`).
 
 ---
@@ -134,7 +160,18 @@ Check-in hanya bisa pada hari H (zona Asia/Jakarta). Seminar yang tanggalnya sud
 4. Sesuaikan env DB bila perlu.
 5. Buka `http://localhost/academeet/`.
 
-Akun admin dibuat manual di tabel `users` dengan `role='admin'` dan password hasil `password_hash()`.
+Akun admin pertama dibuat lewat CLI (tidak perlu SQL manual):
+
+```bash
+C:\xampp\php\php.exe tools\buat_admin.php
+# atau: php tools/buat_admin.php "Nama Admin" admin@kampus.ac.id
+```
+
+Password ditanyakan lewat prompt tersembunyi (minimal 12 karakter) dan tidak boleh lewat argumen/env.
+
+### Lupa password (F5)
+
+Mahasiswa memakai **Lupa password?** di halaman login: isi email → tautan reset dikirim (bila `ACADEMEET_BASE_URL` + SMTP diset) → buka `reset_password.php?token=...` → buat password baru. Token berlaku 30 menit dan sekali pakai. Fitur ini hanya untuk role mahasiswa.
 
 ---
 
@@ -145,6 +182,8 @@ C:\xampp\php\php.exe tests/run.php
 C:\xampp\php\php.exe -l admin.php   # cek sintaks
 
 # Tes fungsi DB — HANYA di database *_test:
-set ACADEMEET_DB_NAME=academeet_paketa_test
+set ACADEMEET_DB_NAME=academeet_paketb_test
 C:\xampp\php\php.exe tests/run_db.php
 ```
+
+`tests/run_db.php` menolak berjalan pada DB yang namanya tidak berakhiran `_test`. Buat salinan dulu (mis. dari dump live), jalankan `migrasi.sql` padanya, lalu arahkan `ACADEMEET_DB_NAME` ke salinan itu. Tes membuat lalu membersihkan datanya sendiri (email berakhiran `@test.local`).
