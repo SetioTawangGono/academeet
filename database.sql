@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     role         ENUM('admin','mahasiswa') NOT NULL DEFAULT 'mahasiswa',
     UNIQUE KEY uq_users_email (email),
     KEY idx_users_role (role),
-    KEY idx_users_nim (nim)
+    UNIQUE KEY uq_users_nim (nim)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS pemateri (
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS seminars (
     pemateri    VARCHAR(150) NOT NULL,
     tanggal     DATE NOT NULL,
     kuota       INT NOT NULL,
+    kuota_total INT NULL,
     status      ENUM('Aktif','Selesai') NOT NULL DEFAULT 'Aktif',
     poster      VARCHAR(255) NULL,
     KEY idx_seminars_tanggal (tanggal),

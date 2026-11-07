@@ -74,3 +74,31 @@ SET @sql := IF(@orphans = 0 AND (SELECT COUNT(*) FROM information_schema.table_c
     'ALTER TABLE seminars ADD CONSTRAINT fk_seminars_pemateri FOREIGN KEY (id_pemateri) REFERENCES pemateri(id_pemateri) ON DELETE SET NULL',
     'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- =====================================================
+-- Paket A
+-- =====================================================
+
+-- kuota_total: kuota awal (total kursi). Sisa kuota tetap di kolom `kuota`.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'kuota_total');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN kuota_total INT NULL AFTER kuota',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Isi kuota_total untuk baris yang masih NULL: total = sisa + jumlah pendaftar.
+UPDATE seminars s
+SET s.kuota_total = s.kuota + (SELECT COUNT(*) FROM registrations r WHERE r.id_seminar = s.id_seminar)
+WHERE s.kuota_total IS NULL;
+
+-- UNIQUE nim: hanya bila belum ada DAN tidak ada NIM ganda.
+SET @dupes := (SELECT COUNT(nim) - COUNT(DISTINCT nim) FROM users WHERE nim IS NOT NULL);
+SET @exists := (SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = 'users' AND index_name = 'uq_users_nim');
+SET @sql := IF(@exists = 0 AND @dupes = 0,
+    'ALTER TABLE users ADD UNIQUE KEY uq_users_nim (nim)',
+    IF(@dupes > 0,
+        "SELECT 'PERINGATAN: NIM ganda, UNIQUE tidak ditambahkan' AS info",
+        'SELECT 1'));
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
