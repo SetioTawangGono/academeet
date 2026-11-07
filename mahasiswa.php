@@ -695,7 +695,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
         <div class="row g-4">
             <?php
             $sql_kat = "SELECT s.*, EXISTS(SELECT 1 FROM registrations r WHERE r.id_seminar = s.id_seminar AND r.id_user = ?) AS sudah_daftar
-                FROM seminars s WHERE s.status = 'Aktif' AND s.kuota > 0 AND s.tanggal >= CURDATE()";
+                FROM seminars s WHERE s.status = 'Aktif' AND s.tanggal >= CURDATE()";
             $params_kat = [$id_user];
             $types_kat = 'i';
             if ($q_kat !== '') {
@@ -721,6 +721,9 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                 foreach ($seminar_rows as $row) {
                     $tgl = date('d M Y', strtotime($row['tanggal']));
                     $sudah_daftar = (int) $row['sudah_daftar'] === 1;
+                    $kuota_total = (int) ($row['kuota_total'] ?? $row['kuota']);
+                    $terisi = max(0, $kuota_total - (int) $row['kuota']);
+                    $penuh = (int) $row['kuota'] <= 0;
             ?>
             <div class="col-md-6 col-lg-4">
                 <div class="card card-custom seminar-card h-100 overflow-hidden d-flex flex-column border-0 shadow-sm">
@@ -734,9 +737,15 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             </div>
                         <?php endif; ?>
                         <div class="position-absolute top-0 end-0 m-3">
-                            <span class="badge badge-soft-primary shadow-sm rounded-pill px-3 py-2 fw-bold">
-                                <i class="bi bi-ticket-detailed me-1" aria-hidden="true"></i><?= (int) $row['kuota'] ?> Kuota
-                            </span>
+                            <?php if ($penuh): ?>
+                                <span class="badge badge-soft-danger shadow-sm rounded-pill px-3 py-2 fw-bold">
+                                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Penuh
+                                </span>
+                            <?php else: ?>
+                                <span class="badge badge-soft-primary shadow-sm rounded-pill px-3 py-2 fw-bold">
+                                    <i class="bi bi-ticket-detailed me-1" aria-hidden="true"></i><?= $terisi ?>/<?= $kuota_total ?>
+                                </span>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="card-body p-4 d-flex flex-column flex-grow-1">
@@ -768,16 +777,25 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                                 </a>
                             <?php else: ?>
                                 <!-- badge setara dengan kartu "sudah terdaftar" -->
-                                <span class="badge badge-soft-primary d-block mb-2 py-2 rounded-pill">
-                                    <i class="bi bi-ticket-detailed me-1"></i> Masih tersedia
-                                </span>
-                                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm btn-daftar-seminar"
-                                        data-bs-toggle="modal" data-bs-target="#confirmModal"
-                                        data-id="<?= (int) $row['id_seminar'] ?>"
-                                        data-judul="<?= e($row['judul']) ?>"
-                                        data-pemateri="<?= e($row['pemateri']) ?>">
-                                    Daftar Sekarang <i class="bi bi-arrow-right-short fs-5 ms-1" aria-hidden="true"></i>
-                                </button>
+                                <?php if ($penuh): ?>
+                                    <span class="badge badge-soft-danger d-block mb-2 py-2 rounded-pill">
+                                        <i class="bi bi-x-circle me-1"></i> Kuota Penuh
+                                    </span>
+                                    <button type="button" class="btn btn-secondary w-100 fw-bold py-2 rounded-pill" disabled>
+                                        Daftar Sekarang <i class="bi bi-arrow-right-short fs-5 ms-1" aria-hidden="true"></i>
+                                    </button>
+                                <?php else: ?>
+                                    <span class="badge badge-soft-primary d-block mb-2 py-2 rounded-pill">
+                                        <i class="bi bi-ticket-detailed me-1"></i> Masih tersedia
+                                    </span>
+                                    <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm btn-daftar-seminar"
+                                            data-bs-toggle="modal" data-bs-target="#confirmModal"
+                                            data-id="<?= (int) $row['id_seminar'] ?>"
+                                            data-judul="<?= e($row['judul']) ?>"
+                                            data-pemateri="<?= e($row['pemateri']) ?>">
+                                        Daftar Sekarang <i class="bi bi-arrow-right-short fs-5 ms-1" aria-hidden="true"></i>
+                                    </button>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>

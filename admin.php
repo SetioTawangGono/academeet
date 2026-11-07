@@ -116,8 +116,8 @@ if (isset($_POST['tambah'])) {
         $poster = upload_image($_FILES['poster'] ?? [], 'posters', 5000000);
         $nama_pemateri = $pmt['nama'];
         $status = 'Aktif';
-        $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, kuota, status, poster) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        mysqli_stmt_bind_param($stmt, 'sississ', $judul, $id_pemateri, $nama_pemateri, $tanggal, $kuota, $status, $poster);
+        $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, kuota, kuota_total, status, poster) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, 'sissiiss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $kuota, $kuota, $status, $poster);
         if (!mysqli_stmt_execute($stmt)) {
             throw new RuntimeException('Gagal menyimpan seminar.');
         }
@@ -644,7 +644,7 @@ if (isset($_POST['reset_password'])) {
                                     <th scope="col">Judul Seminar</th>
                                     <th scope="col">Pemateri</th>
                                     <th scope="col">Tanggal</th>
-                                    <th scope="col">Sisa Kuota</th>
+                                    <th scope="col">Kuota (sisa/total)</th>
                                     <th scope="col">Status</th>
                                     <th scope="col" class="text-center">Aksi</th>
                                 </tr>
@@ -698,7 +698,7 @@ if (isset($_POST['reset_password'])) {
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
                                                 <td class='text-secondary'>" . e($row['pemateri']) . "</td>
                                                 <td class='text-muted small'><i class='bi bi-clock me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "</td>
-                                                <td><span class='badge badge-soft-primary px-3 py-2 rounded-pill'>" . (int) $row['kuota'] . " Kursi</span></td>
+                                                <td><span class='badge badge-soft-primary px-3 py-2 rounded-pill'>" . (int) $row['kuota'] . "/" . (int) ($row['kuota_total'] ?? $row['kuota']) . " Kursi</span></td>
                                                 <td>$status_badge</td>
                                                 <td class='text-center'>
                                                     <div class='d-flex justify-content-center gap-1'>
