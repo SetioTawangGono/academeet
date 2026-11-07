@@ -19,6 +19,17 @@ $check('ticket_code() acak', ticket_code() !== ticket_code());
 $check('password < 8 ditolak', password_ok('1234567') === false);
 $check('password 8 diterima', password_ok('12345678') === true);
 
+// idle_timeout_seconds(): default admin 3600, mahasiswa 14400; role tak dikenal = mahasiswa.
+$check('idle_timeout_seconds() admin default 3600', idle_timeout_seconds('admin') === 3600);
+$check('idle_timeout_seconds() mahasiswa default 14400', idle_timeout_seconds('mahasiswa') === 14400);
+$check('idle_timeout_seconds() role tak dikenal = mahasiswa', idle_timeout_seconds('dosen') === 14400);
+
+// sesi_kedaluwarsa(): null selalu kedaluwarsa; batas tepat belum, lewat sedikit kedaluwarsa.
+$check('sesi_kedaluwarsa() null = kedaluwarsa', sesi_kedaluwarsa(null, 1000, 900) === true);
+$check('sesi_kedaluwarsa() tepat di batas = belum', sesi_kedaluwarsa(100, 1000, 900) === false);
+$check('sesi_kedaluwarsa() lewat batas = kedaluwarsa', sesi_kedaluwarsa(100, 1001, 900) === true);
+$check('sesi_kedaluwarsa() baru aktif = belum', sesi_kedaluwarsa(999, 1000, 900) === false);
+
 // checkin_window_error(): kemarin boleh, hari ini boleh, besok ditolak, format salah ditolak.
 $hariIni = '2026-11-07';
 $check('checkin_window_error() kemarin = boleh', checkin_window_error('2026-11-06', $hariIni) === null);

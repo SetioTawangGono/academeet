@@ -2,7 +2,35 @@
 // Fondasi keamanan & helper bersama. Semua halaman wajib require file ini paling awal.
 date_default_timezone_set('Asia/Jakarta');
 
+/**
+ * Timeout tidak aktif (detik) per role. Admin 60 menit, mahasiswa 240 menit.
+ * Bisa dioverride lewat env ACADEMEET_IDLE_ADMIN_MIN / ACADEMEET_IDLE_USER_MIN
+ * (untuk pengujian). Role tak dikenal memakai batas mahasiswa.
+ */
+function idle_timeout_seconds(string $role): int
+{
+    $envName = $role === 'admin' ? 'ACADEMEET_IDLE_ADMIN_MIN' : 'ACADEMEET_IDLE_USER_MIN';
+    $env = getenv($envName);
+    $menit = ($env !== false && $env !== '' && is_numeric($env))
+        ? (int) $env
+        : ($role === 'admin' ? 60 : 240);
+    return max(1, $menit) * 60;
+}
+
+/** Sesi kedaluwarsa bila $lastActive null atau jarak ($now - $lastActive) melebihi $timeout. */
+function sesi_kedaluwarsa(?int $lastActive, int $now, int $timeout): bool
+{
+    if ($lastActive === null) {
+        return true;
+    }
+    return ($now - $lastActive) > $timeout;
+}
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    // Simpan sesi minimal selama timeout terpanjang (admin bisa di-override naik).
+    $gcMax = max(idle_timeout_seconds('admin'), idle_timeout_seconds('mahasiswa'));
+    ini_set('session.gc_maxlifetime', (string) $gcMax);
+
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
@@ -132,6 +160,18 @@ function require_role(string $role): void
     if (($_SESSION['role'] ?? '') !== $role || empty($_SESSION['id_user'])) {
         redirect('index.php');
     }
+
+    // Timeout tidak aktif: perbarui penanda, tolak bila sudah lewat batas.
+    $now = time();
+    $timeout = idle_timeout_seconds($role);
+    if (sesi_kedaluwarsa($_SESSION['_last_active'] ?? null, $now, $timeout)) {
+        $_SESSION = [];
+        session_destroy();
+        session_start();
+        flash_set('warning', 'Sesi berakhir karena tidak aktif. Silakan login lagi.');
+        redirect('index.php');
+    }
+    $_SESSION['_last_active'] = $now;
 
     // Sesi bisa merujuk user yang sudah dihapus. Validasi ke DB sekali di sini
     // agar halaman tidak fatal saat $user null. Fail-closed: kalau koneksi tak

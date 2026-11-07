@@ -26,11 +26,27 @@ if (isset($_POST['login'])) {
         $data = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
         mysqli_stmt_close($stmt);
 
+        if (!$data) {
+            // Penyeragaman waktu: hash dummy agar waktu respons tak membedakan
+            // email terdaftar atau tidak (anti user-enumeration).
+            // Bukan kredensial: hash dari string acak sekali pakai.
+            password_verify($password, '$2y$10$emJNftDZGeDf17dfkBWxceefV7Uf/fMM49zGcDtd6Z2MQ2XVs4Wzq');
+        }
+
         if ($data && password_verify($password, $data['password'])) {
+            // Rehash bila algoritma/biaya sudah usang.
+            if (password_needs_rehash($data['password'], PASSWORD_DEFAULT)) {
+                $newHash = password_hash($password, PASSWORD_DEFAULT);
+                $up = mysqli_prepare($conn, "UPDATE users SET password = ? WHERE id_user = ?");
+                mysqli_stmt_bind_param($up, 'si', $newHash, $data['id_user']);
+                mysqli_stmt_execute($up);
+                mysqli_stmt_close($up);
+            }
             session_regenerate_id(true);
             $_SESSION['id_user'] = (int) $data['id_user'];
             $_SESSION['nama']    = $data['nama_lengkap'];
             $_SESSION['role']    = $data['role'];
+            $_SESSION['_last_active'] = time();
             unset($_SESSION['_login_attempts'], $_SESSION['_csrf']);
             redirect($data['role'] === 'admin' ? 'admin.php' : 'mahasiswa.php');
         }
