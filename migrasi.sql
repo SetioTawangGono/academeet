@@ -102,3 +102,38 @@ SET @sql := IF(@exists = 0 AND @dupes = 0,
         "SELECT 'PERINGATAN: NIM ganda, UNIQUE tidak ditambahkan' AS info",
         'SELECT 1'));
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- =====================================================
+-- Paket B
+-- =====================================================
+
+-- auth_version: naik saat password berubah/direset; sesi lama langsung tak berlaku.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'auth_version');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE users ADD COLUMN auth_version INT NOT NULL DEFAULT 0',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Tabel throttle percobaan (login, verifikasi tiket, permintaan reset).
+CREATE TABLE IF NOT EXISTS auth_throttle (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    scope        VARCHAR(20) NOT NULL,
+    key_hash     CHAR(64) NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    KEY idx_throttle_lookup (scope, key_hash, attempted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabel token reset password (sekali pakai, disimpan sebagai SHA-256).
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    id_user    INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    created_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at    DATETIME NULL,
+    UNIQUE KEY uq_reset_token (token_hash),
+    KEY idx_reset_user (id_user),
+    CONSTRAINT fk_reset_user FOREIGN KEY (id_user)
+        REFERENCES users (id_user) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

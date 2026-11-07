@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     email        VARCHAR(100) NOT NULL,
     password     VARCHAR(255) NOT NULL,
     role         ENUM('admin','mahasiswa') NOT NULL DEFAULT 'mahasiswa',
+    auth_version INT NOT NULL DEFAULT 0,
     UNIQUE KEY uq_users_email (email),
     KEY idx_users_role (role),
     UNIQUE KEY uq_users_nim (nim)
@@ -60,4 +61,28 @@ CREATE TABLE IF NOT EXISTS registrations (
         REFERENCES users (id_user) ON DELETE CASCADE,
     CONSTRAINT fk_reg_seminar FOREIGN KEY (id_seminar)
         REFERENCES seminars (id_seminar) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Throttle percobaan (login, verifikasi tiket, permintaan reset) di database.
+-- Kunci disimpan sebagai SHA-256 dari "scope|nilai"; jendela geser dihitung dari attempted_at.
+CREATE TABLE IF NOT EXISTS auth_throttle (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    scope        VARCHAR(20) NOT NULL,
+    key_hash     CHAR(64) NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    KEY idx_throttle_lookup (scope, key_hash, attempted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Token reset password mandiri (sekali pakai, disimpan sebagai SHA-256).
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    id_user    INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    created_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at    DATETIME NULL,
+    UNIQUE KEY uq_reset_token (token_hash),
+    KEY idx_reset_user (id_user),
+    CONSTRAINT fk_reset_user FOREIGN KEY (id_user)
+        REFERENCES users (id_user) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
