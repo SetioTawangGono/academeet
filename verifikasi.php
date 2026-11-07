@@ -55,9 +55,11 @@ if ($data) {
     <title>Verifikasi Sertifikat - AcadeMeet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <?= theme_boot_script() ?>
+    <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body class="auth-wrapper">
+<?= theme_toggle_button('theme-toggle--floating') ?>
 
 <div class="container py-5">
     <div class="row justify-content-center">
@@ -118,5 +120,6 @@ if ($data) {
     </div>
 </div>
 
+<script src="theme.js" defer></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
 require_role('admin');
@@ -412,7 +412,8 @@ if (isset($_POST['reset_password'])) {
     <title><?= e($judul_halaman) ?> - AcadeMeet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <?= theme_boot_script() ?>
+    <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -424,7 +425,7 @@ if (isset($_POST['reset_password'])) {
     <!-- ========================================== -->
     <!-- SIDEBAR KIRI                               -->
     <!-- ========================================== -->
-    <aside class="app-sidebar shadow-sm" id="appSidebar">
+    <aside class="app-sidebar" id="appSidebar">
         <div class="sidebar-header d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center">
                 <div class="auth-brand-icon mb-0 me-2" style="width: 38px; height: 38px; font-size: 1.2rem;">
@@ -514,6 +515,7 @@ if (isset($_POST['reset_password'])) {
                 </h1>
             </div>
             <div class="d-flex align-items-center gap-3">
+                <?= theme_toggle_button() ?>
                 <span class="badge badge-soft-primary px-3 py-2 rounded-pill">
                     <i class="bi bi-calendar3 me-1"></i> <?= date('d M Y') ?>
                 </span>
@@ -521,7 +523,7 @@ if (isset($_POST['reset_password'])) {
         </header>
 
         <!-- Inner Content Area -->
-        <div class="p-4" id="konten" tabindex="-1">
+        <div class="admin-content p-3" id="konten" tabindex="-1">
 
             <?= flash_html() ?>
 
@@ -549,7 +551,7 @@ if (isset($_POST['reset_password'])) {
                         <div class="stat-card">
                             <span class="stat-label">Total Mahasiswa</span>
                             <div class="stat-value"><?= $tot_mhs ?></div>
-                            <div class="stat-icon" style="background: #EFF6FF; color: #2563EB;">
+                            <div class="stat-icon stat-icon--primary">
                                 <i class="bi bi-people-fill"></i>
                             </div>
                         </div>
@@ -558,7 +560,7 @@ if (isset($_POST['reset_password'])) {
                         <div class="stat-card">
                             <span class="stat-label">Total Seminar</span>
                             <div class="stat-value"><?= $tot_sem ?></div>
-                            <div class="stat-icon" style="background: #F0FDF4; color: #16A34A;">
+                            <div class="stat-icon stat-icon--success">
                                 <i class="bi bi-calendar-event-fill"></i>
                             </div>
                         </div>
@@ -567,7 +569,7 @@ if (isset($_POST['reset_password'])) {
                         <div class="stat-card">
                             <span class="stat-label">Tiket Terdaftar</span>
                             <div class="stat-value"><?= $tot_reg ?></div>
-                            <div class="stat-icon" style="background: #FFFBEB; color: #D97706;">
+                            <div class="stat-icon stat-icon--warning">
                                 <i class="bi bi-ticket-perforated-fill"></i>
                             </div>
                         </div>
@@ -576,7 +578,7 @@ if (isset($_POST['reset_password'])) {
                         <div class="stat-card">
                             <span class="stat-label">Kehadiran</span>
                             <div class="stat-value"><?= $tot_hadir ?></div>
-                            <div class="stat-icon" style="background: #FDF2F8; color: #DB2777;">
+                            <div class="stat-icon stat-icon--pink">
                                 <i class="bi bi-check-circle-fill"></i>
                             </div>
                         </div>
@@ -587,7 +589,7 @@ if (isset($_POST['reset_password'])) {
                 <div class="card card-custom overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Daftar Seminar</h6>
-                        <div class="d-flex align-items-center gap-2 header-actions flex-wrap">
+                        <div class="admin-toolbar">
                             <?php
                             $f_status = (string) ($_GET['f_status'] ?? '');
                             if (!in_array($f_status, ['Aktif', 'Selesai'], true)) {
@@ -605,7 +607,7 @@ if (isset($_POST['reset_password'])) {
                                 <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
                                 <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q_dashboard) ?>" placeholder="Cari seminar..." aria-label="Cari seminar">
                             </form>
-                            <form method="get" action="admin.php" class="d-flex align-items-center gap-1 flex-wrap">
+                            <form method="get" action="admin.php" class="d-flex align-items-center gap-2 flex-wrap">
                                 <input type="hidden" name="page" value="dashboard">
                                 <?php if ($q_dashboard !== ''): ?>
                                     <input type="hidden" name="q" value="<?= e($q_dashboard) ?>">
@@ -717,11 +719,11 @@ if (isset($_POST['reset_password'])) {
                         <div class="modal-content border-0 shadow-lg rounded-4">
                             <div class="modal-header border-0 pb-0">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#FEE2E2;">
-                                        <i class="bi bi-trash-fill fs-5" style="color:#EF4444;"></i>
+                                    <div class="icon-tint icon-tint--danger">
+                                        <i class="bi bi-trash-fill fs-5"></i>
                                     </div>
                                     <div>
-                                        <h5 class="modal-title fw-bold text-dark mb-0" id="modalHapusLabel">Hapus Seminar?</h5>
+                                        <h5 class="modal-title fw-bold text-body-emphasis mb-0" id="modalHapusLabel">Hapus Seminar?</h5>
                                         <p class="text-muted small mb-0">Tindakan ini tidak dapat dibatalkan</p>
                                     </div>
                                 </div>
@@ -749,11 +751,11 @@ if (isset($_POST['reset_password'])) {
                         <div class="modal-content border-0 shadow-lg rounded-4">
                             <div class="modal-header border-0 pb-0">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#D1FAE5;">
-                                        <i class="bi bi-check2-circle fs-4" style="color:#059669;"></i>
+                                    <div class="icon-tint icon-tint--success">
+                                        <i class="bi bi-check2-circle fs-4"></i>
                                     </div>
                                     <div>
-                                        <h5 class="modal-title fw-bold text-dark mb-0" id="modalSelesaiLabel">Tandai Seminar Selesai?</h5>
+                                        <h5 class="modal-title fw-bold text-body-emphasis mb-0" id="modalSelesaiLabel">Tandai Seminar Selesai?</h5>
                                         <p class="text-muted small mb-0">Status seminar akan diubah menjadi Selesai</p>
                                     </div>
                                 </div>
@@ -846,7 +848,7 @@ if (isset($_POST['reset_password'])) {
                 <div class="row justify-content-center">
                     <div class="col-md-7 col-lg-5">
                         <div class="card card-custom text-center p-4 p-md-5">
-                            <div class="auth-brand-icon mx-auto mb-3" style="width: 64px; height: 64px; font-size: 2rem; background: #ECFDF5; color: #10B981; border-color: #A7F3D0;">
+                            <div class="auth-brand-icon icon-tint--success mx-auto mb-3" style="width: 64px; height: 64px; font-size: 2rem;">
                                 <i class="bi bi-qr-code-scan"></i>
                             </div>
                             <h4 class="fw-bold text-dark mb-1">Check-in Kehadiran</h4>
@@ -1024,11 +1026,13 @@ if (isset($_POST['reset_password'])) {
                 <div class="card card-custom overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Data Mahasiswa Terdaftar</h6>
+                        <div class="admin-toolbar">
                         <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 240px;" role="search">
                             <input type="hidden" name="page" value="mahasiswa">
                             <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
                             <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e(trim((string) ($_GET['q'] ?? ''))) ?>" placeholder="Cari nama / NIM / prodi..." aria-label="Cari mahasiswa">
                         </form>
+                        </div>
                     </div>
                     <div class="table-responsive" tabindex="0" role="region" aria-label="Tabel data mahasiswa">
                         <table class="table table-custom">
@@ -1111,11 +1115,11 @@ if (isset($_POST['reset_password'])) {
                         <div class="modal-content border-0 shadow-lg rounded-4">
                             <div class="modal-header border-0 pb-0">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#FEE2E2;">
-                                        <i class="bi bi-trash-fill fs-5" style="color:#EF4444;"></i>
+                                    <div class="icon-tint icon-tint--danger">
+                                        <i class="bi bi-trash-fill fs-5"></i>
                                     </div>
                                     <div>
-                                        <h5 class="modal-title fw-bold text-dark mb-0" id="modalHapusMhsLabel">Hapus Mahasiswa?</h5>
+                                        <h5 class="modal-title fw-bold text-body-emphasis mb-0" id="modalHapusMhsLabel">Hapus Mahasiswa?</h5>
                                         <p class="text-muted small mb-0">Tindakan ini tidak dapat dibatalkan</p>
                                     </div>
                                 </div>
@@ -1145,7 +1149,7 @@ if (isset($_POST['reset_password'])) {
                 <div class="card card-custom overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Data Pemateri Seminar</h6>
-                        <div class="d-flex align-items-center gap-2 header-actions">
+                        <div class="admin-toolbar">
                             <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 220px;" role="search">
                                 <input type="hidden" name="page" value="pemateri">
                                 <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
@@ -1248,11 +1252,11 @@ if (isset($_POST['reset_password'])) {
                         <div class="modal-content border-0 shadow-lg rounded-4">
                             <div class="modal-header border-0 pb-0">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;background:#FEE2E2;">
-                                        <i class="bi bi-trash-fill fs-5" style="color:#EF4444;"></i>
+                                    <div class="icon-tint icon-tint--danger">
+                                        <i class="bi bi-trash-fill fs-5"></i>
                                     </div>
                                     <div>
-                                        <h5 class="modal-title fw-bold text-dark mb-0" id="modalHapusPemLabel">Hapus Pemateri?</h5>
+                                        <h5 class="modal-title fw-bold text-body-emphasis mb-0" id="modalHapusPemLabel">Hapus Pemateri?</h5>
                                         <p class="text-muted small mb-0">Tindakan ini tidak dapat dibatalkan</p>
                                     </div>
                                 </div>
@@ -1581,11 +1585,13 @@ if (isset($_POST['reset_password'])) {
                 <div class="card card-custom overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Laporan Presensi & Kehadiran Peserta</h6>
+                        <div class="admin-toolbar">
                         <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 220px;" role="search">
                             <input type="hidden" name="page" value="laporan">
                             <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
                             <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e(trim((string) ($_GET['q'] ?? ''))) ?>" placeholder="Cari seminar..." aria-label="Cari seminar pada laporan">
                         </form>
+                        </div>
                     </div>
                     <div class="table-responsive" tabindex="0" role="region" aria-label="Tabel laporan presensi">
                         <table class="table table-custom">
@@ -1764,5 +1770,6 @@ if (isset($_POST['reset_password'])) {
         });
     });
 </script>
+<script src="theme.js" defer></script>
 </body>
 </html>

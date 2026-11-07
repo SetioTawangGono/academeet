@@ -215,61 +215,70 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
     <title><?= e(ucfirst($page)) ?> - AcadeMeet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <?= theme_boot_script() ?>
+    <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
 
 <!-- Navbar -->
-<nav class="navbar navbar-expand-lg glass-navbar sticky-top py-2">
+<nav class="navbar navbar-expand-lg sticky-top glass-navbar">
   <div class="container">
-    <a class="navbar-brand d-flex align-items-center fw-bold text-dark" href="mahasiswa.php">
-        <div class="auth-brand-icon mb-0 me-2" style="width: 34px; height: 34px; font-size: 1rem;">
-            <i class="bi bi-mortarboard-fill"></i>
-        </div>
-        <span>AcadeMeet</span>
-    </a>
+    <div class="nav-glass">
+      <a class="navbar-brand d-flex align-items-center fw-bold text-dark me-2" href="mahasiswa.php">
+          <div class="auth-brand-icon mb-0 me-2" style="width: 34px; height: 34px; font-size: 1rem;">
+              <i class="bi bi-mortarboard-fill"></i>
+          </div>
+          <span>AcadeMeet</span>
+      </a>
 
-    <button class="navbar-toggler btn-glass border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#navRes" aria-label="Buka menu">
-        <i class="bi bi-list fs-3"></i>
-    </button>
+      <div class="d-flex d-lg-none align-items-center gap-2 ms-auto">
+          <?= theme_toggle_button() ?>
+          <button class="navbar-toggler btn-glass border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#navRes" aria-label="Buka menu">
+              <i class="bi bi-list fs-3"></i>
+          </button>
+      </div>
 
-    <div class="collapse navbar-collapse" id="navRes">
-        <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3 gap-1">
-            <li class="nav-item">
-                <a class="nav-link py-2 px-3 rounded-pill <?= $page == 'katalog' ? 'active bg-primary-light text-primary fw-bold' : 'text-muted' ?>" href="mahasiswa.php?page=katalog" <?= $page == 'katalog' ? 'aria-current="page"' : '' ?>>
-                    <i class="bi bi-grid-1x2 me-1" aria-hidden="true"></i> Katalog Seminar
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link py-2 px-3 rounded-pill <?= $page == 'tiket' ? 'active bg-primary-light text-primary fw-bold' : 'text-muted' ?>" href="mahasiswa.php?page=tiket" <?= $page == 'tiket' ? 'aria-current="page"' : '' ?>>
-                    <i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i> Tiket Saya
-                    <?php if($count_aktif > 0): ?>
-                        <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.65rem;" aria-label="<?= (int) $count_aktif ?> tiket belum hadir"><?= $count_aktif ?></span>
-                    <?php endif; ?>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link py-2 px-3 rounded-pill <?= $page == 'profil' ? 'active bg-primary-light text-primary fw-bold' : 'text-muted' ?>" href="mahasiswa.php?page=profil" <?= $page == 'profil' ? 'aria-current="page"' : '' ?>>
-                    <i class="bi bi-person-circle me-1" aria-hidden="true"></i> Profil Saya
-                </a>
-            </li>
-        </ul>
-        <div class="d-flex align-items-center gap-3">
-            <div class="d-none d-sm-flex align-items-center text-end gap-2">
-                <div>
-                    <span class="d-block small text-muted" style="line-height: 1;">Halo,</span>
-                    <span class="fw-bold text-dark small"><?= e($user['nama_lengkap']) ?></span>
-                </div>
-                <img src="<?= e($avatar_url) ?>" class="rounded-circle border" width="34" height="34" style="object-fit: cover;" alt="Avatar <?= e($user['nama_lengkap']) ?>">
-            </div>
-            <form method="POST" action="logout.php" class="d-inline m-0">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn btn-sm btn-light-danger px-3 rounded-pill fw-semibold">
-                    <i class="bi bi-box-arrow-right me-1"></i> Keluar
-                </button>
-            </form>
-        </div>
+      <div class="collapse navbar-collapse" id="navRes">
+          <ul class="navbar-nav mb-2 mb-lg-0 gap-1">
+              <li class="nav-item">
+                  <a class="nav-link py-2 px-3 rounded-pill <?= $page == 'katalog' ? 'active' : '' ?>" href="mahasiswa.php?page=katalog" <?= $page == 'katalog' ? 'aria-current="page"' : '' ?>>
+                      <i class="bi bi-grid-1x2 me-1" aria-hidden="true"></i> Katalog Seminar
+                  </a>
+              </li>
+              <li class="nav-item">
+                  <a class="nav-link py-2 px-3 rounded-pill <?= $page == 'tiket' ? 'active' : '' ?>" href="mahasiswa.php?page=tiket" <?= $page == 'tiket' ? 'aria-current="page"' : '' ?>>
+                      <i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i> Tiket Saya
+                      <?php if($count_aktif > 0): ?>
+                          <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.65rem;" aria-label="<?= (int) $count_aktif ?> tiket belum hadir"><?= $count_aktif ?></span>
+                      <?php endif; ?>
+                  </a>
+              </li>
+              <li class="nav-item">
+                  <a class="nav-link py-2 px-3 rounded-pill <?= $page == 'profil' ? 'active' : '' ?>" href="mahasiswa.php?page=profil" <?= $page == 'profil' ? 'aria-current="page"' : '' ?>>
+                      <i class="bi bi-person-circle me-1" aria-hidden="true"></i> Profil Saya
+                  </a>
+              </li>
+          </ul>
+          <div class="d-flex align-items-center nav-right">
+              <div class="d-none d-sm-flex align-items-center text-end gap-2 me-1">
+                  <div class="d-none d-xl-block">
+                      <span class="d-block small text-muted" style="line-height: 1;">Halo,</span>
+                      <span class="fw-bold text-dark small"><?= e($user['nama_lengkap']) ?></span>
+                  </div>
+                  <img src="<?= e($avatar_url) ?>" class="rounded-circle border" width="34" height="34" style="object-fit: cover;" alt="Avatar <?= e($user['nama_lengkap']) ?>">
+              </div>
+              <div class="d-none d-lg-flex align-items-center">
+                  <?= theme_toggle_button() ?>
+              </div>
+              <form method="POST" action="logout.php" class="d-inline m-0 ms-1">
+                  <?= csrf_field() ?>
+                  <button type="submit" class="btn btn-sm btn-light-danger px-3 rounded-pill fw-semibold">
+                      <i class="bi bi-box-arrow-right me-1"></i> Keluar
+                  </button>
+              </form>
+          </div>
+      </div>
     </div>
   </div>
 </nav>
@@ -427,19 +436,19 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
         $f_hadir = in_array($_GET['f_hadir'] ?? '', ['Hadir', 'Belum Hadir'], true) ? (string) $_GET['f_hadir'] : '';
         $filter_tiket_aktif = $q_tiket !== '' || $f_hadir !== '';
         ?>
-        <form method="get" action="mahasiswa.php" class="d-flex flex-wrap gap-2 mb-4" role="search" aria-label="Filter tiket">
+        <form method="get" action="mahasiswa.php" class="filter-bar d-flex flex-wrap align-items-center gap-2 mb-4" role="search" aria-label="Filter tiket">
             <input type="hidden" name="page" value="tiket">
-            <div class="input-group input-group-sm" style="max-width: 260px;">
-                <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari tiket"><i class="bi bi-search"></i></button>
-                <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q_tiket) ?>" placeholder="Cari judul / pemateri / kode" aria-label="Cari judul, pemateri, atau kode tiket">
+            <div class="input-group input-group-sm search-field">
+                <button type="submit" class="input-group-text" aria-label="Cari tiket"><i class="bi bi-search"></i></button>
+                <input type="search" name="q" class="form-control" value="<?= e($q_tiket) ?>" placeholder="Cari judul / pemateri / kode" aria-label="Cari judul, pemateri, atau kode tiket">
             </div>
             <label for="f_hadir" class="visually-hidden">Filter status kehadiran</label>
-            <select name="f_hadir" id="f_hadir" class="form-select form-select-sm" style="max-width: 170px;">
+            <select name="f_hadir" id="f_hadir" class="form-select form-select-sm" style="width: auto;">
                 <option value="">Semua status</option>
                 <option value="Hadir" <?= $f_hadir === 'Hadir' ? 'selected' : '' ?>>Hadir</option>
                 <option value="Belum Hadir" <?= $f_hadir === 'Belum Hadir' ? 'selected' : '' ?>>Belum Hadir</option>
             </select>
-            <button type="submit" class="btn btn-sm btn-light-primary fw-semibold">Filter</button>
+            <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3">Filter</button>
             <?php if ($filter_tiket_aktif): ?>
                 <a href="mahasiswa.php?page=tiket" class="btn btn-sm btn-light fw-semibold">Reset</a>
             <?php endif; ?>
@@ -482,7 +491,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             $is_h = ($t['status_hadir'] === 'Hadir');
             ?>
             <div class="col-lg-6 col-xl-4">
-                <div class="card card-custom h-100 overflow-hidden shadow-sm border-0">
+                <div class="card card-custom tiket-card h-100 overflow-hidden shadow-sm border-0">
                     <div class="p-4">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="badge badge-soft-<?= $is_h ? 'success' : 'warning' ?> px-3 py-2 rounded-pill fw-bold">
@@ -495,8 +504,8 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             <i class="bi bi-person-fill text-primary me-2"></i><?= e($t['pemateri']) ?>
                         </div>
                         <div class="bg-light p-4 rounded-4 text-center border dashed-border position-relative">
-                            <div class="position-absolute bg-white rounded-circle" style="width: 20px; height: 20px; left: -10px; top: 50%; margin-top: -10px; border-right: 1px solid #dee2e6;"></div>
-                            <div class="position-absolute bg-white rounded-circle" style="width: 20px; height: 20px; right: -10px; top: 50%; margin-top: -10px; border-left: 1px solid #dee2e6;"></div>
+                            <div class="position-absolute ticket-notch ticket-notch--left rounded-circle" style="width: 20px; height: 20px; left: -10px; top: 50%; margin-top: -10px;"></div>
+                            <div class="position-absolute ticket-notch ticket-notch--right rounded-circle" style="width: 20px; height: 20px; right: -10px; top: 50%; margin-top: -10px;"></div>
                             <small class="text-muted d-block mb-3 letter-spacing-1" style="font-size: 0.7rem; text-transform: uppercase;">QR Tiket Presensi</small>
                             <div class="qr-ticket bg-white rounded-3 shadow-sm border p-2 d-inline-block mb-3" data-code="<?= e($t['kode_tiket']) ?>" style="width: 140px; height: 140px;" role="img" aria-label="QR tiket <?= e($t['kode_tiket']) ?>"></div>
                             <div class="d-flex align-items-center justify-content-center gap-2">
@@ -646,24 +655,24 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             </h1>
         </div>
 
-        <form method="get" action="mahasiswa.php" class="d-flex flex-wrap gap-2 mb-4" role="search" aria-label="Filter katalog">
+        <form method="get" action="mahasiswa.php" class="filter-bar d-flex flex-wrap align-items-center gap-2 mb-4" role="search" aria-label="Filter katalog">
             <input type="hidden" name="page" value="katalog">
-            <div class="input-group input-group-sm" style="max-width: 260px;">
-                <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari seminar"><i class="bi bi-search"></i></button>
-                <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q_kat) ?>" placeholder="Cari judul / pemateri" aria-label="Cari judul atau pemateri">
+            <div class="input-group input-group-sm search-field">
+                <button type="submit" class="input-group-text" aria-label="Cari seminar"><i class="bi bi-search"></i></button>
+                <input type="search" name="q" class="form-control" value="<?= e($q_kat) ?>" placeholder="Cari judul / pemateri" aria-label="Cari judul atau pemateri">
             </div>
             <label for="f_kat" class="visually-hidden">Filter pendaftaran</label>
-            <select name="f_kat" id="f_kat" class="form-select form-select-sm" style="max-width: 200px;">
+            <select name="f_kat" id="f_kat" class="form-select form-select-sm" style="width: auto;">
                 <option value="">Semua seminar</option>
                 <option value="belum" <?= $f_kat === 'belum' ? 'selected' : '' ?>>Belum saya daftar</option>
                 <option value="sudah" <?= $f_kat === 'sudah' ? 'selected' : '' ?>>Sudah saya daftar</option>
             </select>
             <label for="sort_kat" class="visually-hidden">Urutkan</label>
-            <select name="sort" id="sort_kat" class="form-select form-select-sm" style="max-width: 160px;">
+            <select name="sort" id="sort_kat" class="form-select form-select-sm" style="width: auto;">
                 <option value="terdekat" <?= $sort_kat === 'terdekat' ? 'selected' : '' ?>>Terdekat</option>
                 <option value="terlama" <?= $sort_kat === 'terlama' ? 'selected' : '' ?>>Terlama</option>
             </select>
-            <button type="submit" class="btn btn-sm btn-light-primary fw-semibold">Filter</button>
+            <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3">Filter</button>
             <?php if ($filter_kat_aktif): ?>
                 <a href="mahasiswa.php?page=katalog" class="btn btn-sm btn-light fw-semibold">Reset</a>
             <?php endif; ?>
@@ -711,8 +720,8 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             </div>
                         <?php endif; ?>
                         <div class="position-absolute top-0 end-0 m-3">
-                            <span class="badge bg-white text-dark shadow-sm rounded-pill px-3 py-2 fw-bold">
-                                <i class="bi bi-ticket-detailed text-primary me-1" aria-hidden="true"></i><?= (int) $row['kuota'] ?> Kuota
+                            <span class="badge badge-soft-primary shadow-sm rounded-pill px-3 py-2 fw-bold">
+                                <i class="bi bi-ticket-detailed me-1" aria-hidden="true"></i><?= (int) $row['kuota'] ?> Kuota
                             </span>
                         </div>
                     </div>
@@ -783,7 +792,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                 <div class="auth-brand-icon mx-auto mb-4" style="width: 68px; height: 68px; font-size: 2rem; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-border); border-radius: 20px;">
                     <i class="bi bi-ticket-perforated-fill"></i>
                 </div>
-                <h5 class="fw-bold text-dark mb-2" id="confirmModalLabel">Konfirmasi Pendaftaran</h5>
+                <h5 class="fw-bold text-body-emphasis mb-2" id="confirmModalLabel">Konfirmasi Pendaftaran</h5>
                 <p class="text-muted mb-4">Apakah anda yakin ingin mendaftar pada seminar ini?</p>
                 <div class="p-3 bg-light rounded-4 border text-start mb-4">
                     <div class="fw-bold text-dark mb-1" id="modalSeminarJudul">-</div>
@@ -863,6 +872,6 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             tombol.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Memproses...';
         });
     });
-</script>
+</script><script src="theme.js" defer></script>
 </body>
 </html>

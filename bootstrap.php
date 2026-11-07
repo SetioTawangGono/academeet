@@ -247,8 +247,27 @@ function table_footer(int $total, int $page, int $perPage): string
 {
     $start = $total > 0 ? ($page - 1) * $perPage + 1 : 0;
     $end = min($page * $perPage, $total);
-    return '<div class="bg-white border-top px-4 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">'
+    return '<div class="table-footer border-top px-4 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">'
         . '<span class="small text-muted">Menampilkan ' . $start . '–' . $end . ' dari ' . $total . ' data</span>'
         . pagination_html($total, $page, $perPage)
         . '</div>';
+}
+
+/** Skrip kecil untuk <head>: set data-bs-theme SEBELUM CSS dimuat, cegah kilatan putih. */
+function theme_boot_script(): string
+{
+    return '<script>(function(){try{var t=localStorage.getItem("academeet-theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.setAttribute("data-bs-theme",t);}catch(e){}})();</script>';
+}
+
+/** Switch tema (pill + knob geser). */
+function theme_toggle_button(string $extraClass = ''): string
+{
+    $class = trim('js-theme-toggle theme-switch ' . $extraClass);
+    return '<button type="button" class="' . e($class) . '"'
+        . ' aria-pressed="false" aria-label="Ganti ke mode gelap">'
+        . '<span class="theme-switch__knob">'
+        . '<i class="bi bi-sun-fill" aria-hidden="true"></i>'
+        . '<i class="bi bi-moon-stars-fill" aria-hidden="true"></i>'
+        . '</span>'
+        . '</button>';
 }

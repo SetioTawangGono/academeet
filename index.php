@@ -49,9 +49,11 @@ if (isset($_POST['login'])) {
     <title>Login - AcadeMeet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <?= theme_boot_script() ?>
+    <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body class="auth-wrapper">
+<?= theme_toggle_button('theme-toggle--floating') ?>
 
 <div class="container">
     <div class="row justify-content-center">
@@ -86,7 +88,7 @@ if (isset($_POST['login'])) {
                         <label for="password" class="form-label small fw-semibold text-secondary">Password</label>
                         <div class="input-group">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-lock"></i></span>
-                            <input type="password" name="password" class="form-control border-start-0 ps-0" id="password" placeholder="••••••••" autocomplete="current-password" required>
+                            <input type="password" name="password" class="form-control border-start-0 ps-0" id="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password" required>
                         </div>
                     </div>
                     <button type="submit" name="login" class="btn btn-primary w-100 py-2 shadow-sm mb-3">
@@ -107,5 +109,6 @@ if (isset($_POST['login'])) {
     </div>
 </div>
 
+<script src="theme.js" defer></script>
 </body>
 </html>

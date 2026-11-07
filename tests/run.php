@@ -32,5 +32,13 @@ $check('list_page() default', list_page() === [1, 10, '']);
 $check('pagination_html() punya tautan halaman', str_contains(pagination_html(25, 1, 10), 'p=2'));
 $check('table_footer() menghitung rentang', str_contains(table_footer(25, 1, 10), 'Menampilkan 1–10 dari 25 data'));
 
+$check('theme_boot_script menyetel data-bs-theme', str_contains(theme_boot_script(), 'data-bs-theme'));
+$check('theme_boot_script berbaca localStorage', str_contains(theme_boot_script(), 'academeet-theme'));
+$check('theme_toggle_button punya js-theme-toggle + aria-pressed', str_contains(theme_toggle_button(), 'js-theme-toggle') && str_contains(theme_toggle_button(), 'aria-pressed'));
+$check('theme_toggle_button terima extraClass', str_contains(theme_toggle_button('theme-toggle--floating'), 'theme-toggle--floating'));
+$check('theme_toggle_button pakai .theme-switch + knob', str_contains(theme_toggle_button(), 'theme-switch') && str_contains(theme_toggle_button(), 'theme-switch__knob'));
+$check('theme_toggle_button punya ikon sun & moon', str_contains(theme_toggle_button(), 'bi-sun-fill') && str_contains(theme_toggle_button(), 'bi-moon-stars-fill'));
+$check('theme_toggle_button tak pakai btn-glass', !str_contains(theme_toggle_button(), 'btn-glass'));
+
 echo $failed === 0 ? "\nSemua tes lulus.\n" : "\n{$failed} tes gagal.\n";
 exit($failed === 0 ? 0 : 1);

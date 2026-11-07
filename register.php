@@ -90,9 +90,11 @@ if (isset($_SESSION['_flash_error'])) {
     <title>Daftar Mahasiswa - AcadeMeet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <?= theme_boot_script() ?>
+    <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body class="auth-wrapper">
+<?= theme_toggle_button('theme-toggle--floating') ?>
 
 <div class="container py-4">    <div class="row justify-content-center">
         <div class="col-11 col-sm-10 col-md-8 col-lg-6">
@@ -185,5 +187,6 @@ if (isset($_SESSION['_flash_error'])) {
     </div>
 </div>
 
+<script src="theme.js" defer></script>
 </body>
 </html>

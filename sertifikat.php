@@ -136,9 +136,11 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
     <title>Preview Sertifikat - AcadeMeet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <?= theme_boot_script() ?>
+    <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body>
+<?= theme_toggle_button('theme-toggle--floating') ?>
 
 <div class="container py-5">
     <div class="row justify-content-center">
@@ -152,7 +154,7 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
                     <p class="text-muted small mb-0">Preview sertifikat kehadiran seminar</p>
                 </div>
 
-                <div class="bg-white rounded-3 p-3 p-md-5 mb-4 border shadow-sm" style="aspect-ratio: 1.414 / 1; position: relative;">
+                <div class="certificate-paper bg-white rounded-3 p-3 p-md-5 mb-4 border shadow-sm" style="aspect-ratio: 1.414 / 1; position: relative;">
                     <div class="h-100 d-flex flex-column justify-content-between" style="font-family: 'Times New Roman', serif;">
                         <div class="text-center">
                             <div class="text-primary fw-bold mb-1 mb-md-2" style="font-size: clamp(0.8rem, 3.2vw, 1.5rem); letter-spacing: 0.1em;">SERTIFIKAT PENGHARGAAN</div>
@@ -219,6 +221,6 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script><script src="theme.js" defer></script>
 </body>
 </html>
