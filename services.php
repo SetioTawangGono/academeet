@@ -260,3 +260,104 @@ function throttle_bersihkan_oportunistik(mysqli $conn): void
     }
     @mysqli_query($conn, "DELETE FROM auth_throttle WHERE attempted_at < (NOW() - INTERVAL 1 DAY)");
 }
+
+/** Masa berlaku token reset (detik). */
+const RESET_TOKEN_TTL = 1800; // 30 menit
+
+/**
+ * Buat token reset untuk satu user. Menghapus token lama user itu (satu aktif per user),
+ * menyimpan hash SHA-256, dan mengembalikan token MENTAH sekali saja (untuk dikirim).
+ * Mengembalikan token (string 64 hex) atau null bila gagal.
+ */
+function buat_token_reset(mysqli $conn, int $id_user): ?string
+{
+    $token = bin2hex(random_bytes(32));
+    $hash = hash('sha256', $token);
+
+    if (!mysqli_begin_transaction($conn)) {
+        return null;
+    }
+    try {
+        $del = mysqli_prepare($conn, "DELETE FROM password_resets WHERE id_user = ?");
+        mysqli_stmt_bind_param($del, 'i', $id_user);
+        mysqli_stmt_execute($del);
+        mysqli_stmt_close($del);
+
+        $ttl = RESET_TOKEN_TTL;
+        $ins = mysqli_prepare($conn, "INSERT INTO password_resets (id_user, token_hash, created_at, expires_at)
+            VALUES (?, ?, NOW(), NOW() + INTERVAL ? SECOND)");
+        mysqli_stmt_bind_param($ins, 'isi', $id_user, $hash, $ttl);
+        if (!mysqli_stmt_execute($ins)) {
+            throw new RuntimeException('Gagal menyimpan token.');
+        }
+        mysqli_stmt_close($ins);
+
+        mysqli_commit($conn);
+        return $token;
+    } catch (Throwable $ex) {
+        mysqli_rollback($conn);
+        return null;
+    }
+}
+
+/**
+ * Pakai token reset: validasi (belum dipakai, belum kedaluwarsa), ubah password,
+ * naikkan auth_version, tandai used_at, hapus token lain user itu — dalam satu transaksi.
+ * Token tidak valid/kedaluwarsa/terpakai menghasilkan pesan generik yang sama.
+ * Mengembalikan [tipe, pesan].
+ */
+function pakai_token_reset(mysqli $conn, string $token, string $passwordBaru): array
+{
+    $generik = 'Tautan reset tidak valid atau sudah kedaluwarsa.';
+    if ($token === '' || !preg_match('/^[0-9a-f]{64}$/', $token)) {
+        return ['danger', $generik];
+    }
+    if (!password_ok($passwordBaru)) {
+        return ['danger', 'Password baru minimal 8 karakter.'];
+    }
+    $hash = hash('sha256', $token);
+
+    if (!mysqli_begin_transaction($conn)) {
+        return ['danger', 'Gagal memulai transaksi.'];
+    }
+    try {
+        $stmt = mysqli_prepare($conn, "SELECT pr.id, pr.id_user, pr.used_at, (pr.expires_at <= NOW()) AS kedaluwarsa, u.role
+            FROM password_resets pr JOIN users u ON pr.id_user = u.id_user
+            WHERE pr.token_hash = ? FOR UPDATE");
+        mysqli_stmt_bind_param($stmt, 's', $hash);
+        mysqli_stmt_execute($stmt);
+        $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+
+        if (!$row || $row['used_at'] !== null || (int) $row['kedaluwarsa'] === 1) {
+            throw new RuntimeException($generik);
+        }
+        if ($row['role'] !== 'mahasiswa') {
+            throw new RuntimeException($generik);
+        }
+
+        $idUser = (int) $row['id_user'];
+        $newHash = password_hash($passwordBaru, PASSWORD_DEFAULT);
+        $up = mysqli_prepare($conn, "UPDATE users SET password = ?, auth_version = auth_version + 1 WHERE id_user = ?");
+        mysqli_stmt_bind_param($up, 'si', $newHash, $idUser);
+        mysqli_stmt_execute($up);
+        mysqli_stmt_close($up);
+
+        $mark = mysqli_prepare($conn, "UPDATE password_resets SET used_at = NOW() WHERE id = ?");
+        mysqli_stmt_bind_param($mark, 'i', $row['id']);
+        mysqli_stmt_execute($mark);
+        mysqli_stmt_close($mark);
+
+        $del = mysqli_prepare($conn, "DELETE FROM password_resets WHERE id_user = ? AND id <> ?");
+        mysqli_stmt_bind_param($del, 'ii', $idUser, $row['id']);
+        mysqli_stmt_execute($del);
+        mysqli_stmt_close($del);
+
+        mysqli_commit($conn);
+        return ['success', 'Password berhasil direset. Silakan login dengan password baru.'];
+    } catch (Throwable $ex) {
+        mysqli_rollback($conn);
+        $pesan = $ex instanceof RuntimeException ? $ex->getMessage() : 'Gagal mereset password.';
+        return ['danger', $pesan];
+    }
+}

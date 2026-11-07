@@ -36,6 +36,15 @@ $check('throttle_key() lowercase sama', throttle_key('login_ep', 'A@B.com') === 
 $check('throttle_key() scope beda -> hash beda', throttle_key('login_ep', 'a@b.com') !== throttle_key('login_ip', 'a@b.com'));
 $check('throttle_key() nilai beda -> hash beda', throttle_key('login_ep', 'a@b.com') !== throttle_key('login_ep', 'c@d.com'));
 
+// isi_email_reset(): murni; menyusun tautan dari base URL + token.
+require __DIR__ . '/../mailer.php';
+$isiEmail = isi_email_reset('http://localhost/academeet', str_repeat('a', 64));
+$check('isi_email_reset() memuat tautan reset', str_contains($isiEmail, 'reset_password.php?token=' . str_repeat('a', 64)));
+$check('isi_email_reset() tak dobel slash', str_contains($isiEmail, 'http://localhost/academeet/reset_password.php'));
+$check('isi_email_reset() sebut masa berlaku', str_contains($isiEmail, '30 menit'));
+$isiEmailSlash = isi_email_reset('http://localhost/academeet/', 'tok');
+$check('isi_email_reset() base trailing slash tetap rapi', str_contains($isiEmailSlash, 'academeet/reset_password.php?token=tok'));
+
 // checkin_window_error(): kemarin boleh, hari ini boleh, besok ditolak, format salah ditolak.
 $hariIni = '2026-11-07';
 $check('checkin_window_error() kemarin = boleh', checkin_window_error('2026-11-06', $hariIni) === null);

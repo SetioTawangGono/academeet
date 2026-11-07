@@ -228,6 +228,60 @@ try {
 
     [$t, ] = buat_admin($conn, 'Admin Empat', 'bukan-email', 'passwordpanjang12');
     $check('buat_admin email tidak valid ditolak', $t === 'danger');
+
+    // ===== token reset password =====
+    $idReset = ins_user($conn, 'Reset ' . $tag, "reset{$tag}@test.local");
+    $token1 = buat_token_reset($conn, $idReset);
+    $check('buat_token_reset mengembalikan 64 hex', is_string($token1) && (bool) preg_match('/^[0-9a-f]{64}$/', $token1));
+
+    // Hanya satu token aktif per user: token baru menghapus hash lama.
+    $token2 = buat_token_reset($conn, $idReset);
+    $countTok = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM password_resets WHERE id_user = $idReset"))['c'];
+    $check('hanya satu token aktif per user', $countTok === 1);
+
+    // Token lama (token1) sudah tak ada; token2 valid.
+    [$t, ] = pakai_token_reset($conn, $token1, 'passwordbaru1');
+    $check('token lama (digantikan) ditolak', $t === 'danger');
+
+    // Reset sukses menaikkan auth_version dan mengubah password.
+    $avBefore = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user = $idReset"))['auth_version'];
+    [$t, ] = pakai_token_reset($conn, $token2, 'passwordbaru2');
+    $check('reset token sukses', $t === 'success');
+    $rowR = mysqli_fetch_assoc(mysqli_query($conn, "SELECT password, auth_version FROM users WHERE id_user = $idReset"));
+    $check('reset menaikkan auth_version', (int) $rowR['auth_version'] === $avBefore + 1);
+    $check('reset mengganti password (verify)', password_verify('passwordbaru2', $rowR['password']));
+
+    // Sekali pakai: token yang sama tak bisa dipakai lagi.
+    [$t, ] = pakai_token_reset($conn, $token2, 'passwordbaru3');
+    $check('token sekali pakai ditolak kedua kali', $t === 'danger');
+
+    // Token kedaluwarsa ditolak.
+    $idExp = ins_user($conn, 'Exp ' . $tag, "exp{$tag}@test.local");
+    $tokExp = bin2hex(random_bytes(32));
+    $stmt = mysqli_prepare($conn, "INSERT INTO password_resets (id_user, token_hash, created_at, expires_at) VALUES (?, ?, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 MINUTE)");
+    $hashExp = hash('sha256', $tokExp);
+    mysqli_stmt_bind_param($stmt, 'is', $idExp, $hashExp);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    [$t, ] = pakai_token_reset($conn, $tokExp, 'passwordbaru4');
+    $check('token kedaluwarsa ditolak', $t === 'danger');
+
+    // Token milik user lain tidak bisa dipakai untuk user yang salah: satu token = satu user.
+    $idA = ins_user($conn, 'A ' . $tag, "ua{$tag}@test.local");
+    $tokA = buat_token_reset($conn, $idA);
+    [$t, ] = pakai_token_reset($conn, $tokA, 'passwordbaru5');
+    $check('token user A hanya untuk A', $t === 'success');
+
+    // Admin tidak bisa di-reset lewat token (role bukan mahasiswa).
+    [$t, $msgA, $idAdm] = buat_admin($conn, 'Adm Reset ' . $tag, "admreset{$tag}@test.local", 'passwordpanjang12');
+    $tokAdm = buat_token_reset($conn, (int) $idAdm);
+    [$t, ] = pakai_token_reset($conn, $tokAdm, 'passwordbaru6');
+    $check('token untuk admin ditolak', $t === 'danger');
+
+    // Password baru kurang dari 8 ditolak.
+    $tokShort = buat_token_reset($conn, $idA);
+    [$t, ] = pakai_token_reset($conn, $tokShort, 'pendek');
+    $check('reset password < 8 ditolak', $t === 'danger');
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";
@@ -238,6 +292,7 @@ try {
     mysqli_query($conn, "DELETE FROM users WHERE email LIKE 'uji%test.local'");
     mysqli_query($conn, "DELETE FROM pemateri WHERE nama LIKE 'Pemateri Uji %'");
     mysqli_query($conn, "DELETE FROM auth_throttle WHERE scope LIKE 'test_%'");
+    mysqli_query($conn, "DELETE FROM password_resets WHERE id_user IN (SELECT id_user FROM users WHERE email LIKE '%{$tag}%@test.local')");
     mysqli_query($conn, "DELETE FROM users WHERE email LIKE '%{$tag}%@test.local'");
 }
 

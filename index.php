@@ -149,6 +149,7 @@ if (isset($_POST['login'])) {
 
                 <div class="text-center mt-3 pt-3 border-top">
                     <p class="small text-muted mb-0">Belum memiliki akun? <a href="register.php" class="text-decoration-none fw-semibold text-primary">Daftar Akun Mahasiswa</a></p>
+                    <p class="small mb-0 mt-2"><a href="lupa_password.php" class="text-decoration-none fw-semibold text-secondary">Lupa password?</a></p>
                 </div>
                 <div class="text-center mt-2">
                     <a href="verifikasi.php" class="text-decoration-none small fw-semibold text-muted">
