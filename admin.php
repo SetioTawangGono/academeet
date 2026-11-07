@@ -3,7 +3,7 @@ require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
 require_role('admin');
 
-$allowed_pages = ['dashboard', 'tambah', 'scan', 'mahasiswa', 'detail_mahasiswa', 'pemateri', 'tambah_pemateri', 'detail_pemateri', 'laporan'];
+$allowed_pages = ['dashboard', 'tambah', 'edit_seminar', 'scan', 'mahasiswa', 'detail_mahasiswa', 'pemateri', 'tambah_pemateri', 'detail_pemateri', 'laporan'];
 $page = (string) ($_GET['page'] ?? 'dashboard');
 if (!in_array($page, $allowed_pages, true)) {
     $page = 'dashboard';
@@ -29,6 +29,7 @@ if ($page === 'detail_pemateri' || $page === 'detail_mahasiswa') {
 $judul_halaman = [
     'dashboard' => 'Dashboard',
     'tambah' => 'Buat Seminar',
+    'edit_seminar' => 'Edit Seminar',
     'scan' => 'Scanner Check-in',
     'mahasiswa' => 'Data Mahasiswa',
     'detail_mahasiswa' => 'Detail Mahasiswa',
@@ -151,6 +152,81 @@ if (isset($_POST['selesai'])) {
     mysqli_stmt_close($stmt);
     flash_set($ok ? 'success' : 'danger', $ok ? 'Seminar ditandai sebagai selesai.' : 'Gagal mengubah status seminar.');
     redirect('admin.php?page=dashboard');
+}
+
+// ==========================================
+// EDIT SEMINAR
+// ==========================================
+if (isset($_POST['edit_seminar'])) {
+    csrf_check();
+    $id_seminar = (int) ($_POST['id_seminar'] ?? 0);
+    $judul = trim((string) ($_POST['judul'] ?? ''));
+    $id_pemateri = (int) ($_POST['id_pemateri'] ?? 0);
+    $tanggal = (string) ($_POST['tanggal'] ?? '');
+    $kuota_total = (int) ($_POST['kuota_total'] ?? 0);
+    $tujuan = 'admin.php?page=edit_seminar&id=' . $id_seminar;
+    $poster_baru = null;
+    $poster_lama = null;
+
+    try {
+        $row_sem = mysqli_fetch_assoc(mysqli_query($conn, "SELECT status, tanggal, poster FROM seminars WHERE id_seminar = $id_seminar"));
+        if (!$row_sem) {
+            throw new RuntimeException('Seminar tidak ditemukan.');
+        }
+        if (seminar_status_efektif((string) $row_sem['status'], (string) $row_sem['tanggal'], date('Y-m-d')) !== 'Aktif') {
+            flash_set('danger', 'Seminar yang sudah selesai tidak dapat diedit.');
+            redirect('admin.php?page=dashboard');
+        }
+        $poster_lama = $row_sem['poster'];
+
+        // Validasi form dasar sebelum upload.
+        $err = '';
+        if ($judul === '') {
+            $err = 'Judul seminar wajib diisi.';
+        } elseif (str_len($judul) > 200) {
+            $err = 'Judul seminar maksimal 200 karakter.';
+        } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+            $err = 'Format tanggal tidak valid.';
+        } elseif ($kuota_total < 1) {
+            $err = 'Kuota total minimal 1.';
+        } elseif ($id_pemateri <= 0) {
+            $err = 'Pemateri wajib dipilih.';
+        }
+        if ($err !== '') {
+            throw new RuntimeException($err);
+        }
+
+        $poster_baru = upload_image($_FILES['poster'] ?? [], 'posters', 5000000);
+
+        [$type, $message, $commit_ok] = ubah_seminar($conn, $id_seminar, [
+            'judul' => $judul,
+            'id_pemateri' => $id_pemateri,
+            'tanggal' => $tanggal,
+            'kuota_total' => $kuota_total,
+        ], $poster_baru);
+
+        if ($type === 'success') {
+            if ($poster_baru && !empty($poster_lama) && file_exists("uploads/posters/" . $poster_lama)) {
+                @unlink("uploads/posters/" . $poster_lama);
+            }
+            flash_set('success', $message);
+            $tujuan = 'admin.php?page=dashboard';
+        } else {
+            throw new RuntimeException($message);
+        }
+    } catch (Throwable $ex) {
+        if ($poster_baru && file_exists("uploads/posters/" . $poster_baru)) {
+            @unlink("uploads/posters/" . $poster_baru);
+        }
+        $_SESSION['_old'] = [
+            'judul' => $judul,
+            'id_pemateri' => (string) $id_pemateri,
+            'tanggal' => $tanggal,
+            'kuota_total' => (string) $kuota_total,
+        ];
+        flash_set('danger', $ex->getMessage());
+    }
+    redirect($tujuan);
 }
 
 // ==========================================
@@ -693,6 +769,12 @@ if (isset($_POST['reset_password'])) {
                                                </button>"
                                             : "";
 
+                                        $aksi_edit = $status_efektif === 'Aktif'
+                                            ? "<a href='admin.php?page=edit_seminar&id=$id_sem' class='btn btn-sm btn-light-primary fw-semibold'>
+                                                <i class='bi bi-pencil me-1'></i>Edit
+                                               </a>"
+                                            : "";
+
                                         echo "<tr>
                                                 <td><img src='" . e($img_src) . "' alt='Poster " . e($row['judul']) . "' class='rounded-3 shadow-sm border' width='80' height='50' loading='lazy' decoding='async' style='object-fit:cover;'></td>
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
@@ -702,6 +784,7 @@ if (isset($_POST['reset_password'])) {
                                                 <td>$status_badge</td>
                                                 <td class='text-center'>
                                                     <div class='d-flex justify-content-center gap-1'>
+                                                        $aksi_edit
                                                         $aksi_selesai
                                                         <button type='button'
                                                             class='btn btn-sm btn-light-danger fw-semibold js-hapus-seminar'
@@ -842,6 +925,80 @@ if (isset($_POST['reset_password'])) {
                                 <a href="admin.php?page=dashboard" class="btn btn-light fw-semibold px-4">Batal</a>
                                 <button type="submit" name="tambah" class="btn btn-primary px-4">
                                     <i class="bi bi-cloud-arrow-up me-1"></i> Publikasikan Seminar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            <?php
+            // ---------------------------------------------------------
+            // MENU 2b: EDIT SEMINAR
+            // ---------------------------------------------------------
+            } elseif ($page == 'edit_seminar') {
+                $id_edit = (int) ($_GET['id'] ?? 0);
+                $sem_edit = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM seminars WHERE id_seminar = $id_edit"));
+                if (!$sem_edit || seminar_status_efektif((string) $sem_edit['status'], (string) $sem_edit['tanggal'], date('Y-m-d')) !== 'Aktif') {
+                    flash_set('danger', 'Seminar tidak ditemukan atau sudah selesai (tidak dapat diedit).');
+                    redirect('admin.php?page=dashboard');
+                }
+                $pendaftar_edit = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $id_edit"))['c'];
+            ?>
+                <div class="card card-custom mb-4">
+                    <div class="card-header bg-white border-bottom py-3 px-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; background: var(--primary-light); color: var(--primary);">
+                                <i class="bi bi-pencil-square fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-bold mb-0 text-dark">Edit Seminar</div>
+                                <p class="text-muted small mb-0">Perbarui detail seminar. Pendaftar saat ini: <?= $pendaftar_edit ?></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <form method="POST" action="admin.php?page=edit_seminar&id=<?= $id_edit ?>" enctype="multipart/form-data">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="id_seminar" value="<?= $id_edit ?>">
+                            <div class="row g-4">
+                                <div class="col-lg-6">
+                                    <label for="judul" class="form-label small fw-semibold text-secondary">Judul Seminar</label>
+                                    <input type="text" class="form-control" id="judul" name="judul" maxlength="200" value="<?= e(old('judul', (string) $sem_edit['judul'])) ?>" required>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="id_pemateri" class="form-label small fw-semibold text-secondary">Pilih Pemateri</label>
+                                    <select class="form-select" id="id_pemateri" name="id_pemateri" required>
+                                        <option value="">-- Pilih Pemateri --</option>
+                                        <?php
+                                        $terpilih_id = old('id_pemateri', (string) $sem_edit['id_pemateri']);
+                                        $pemateri_list2 = mysqli_query($conn, "SELECT id_pemateri, nama, keahlian, institusi FROM pemateri ORDER BY nama ASC");
+                                        while ($pmt = mysqli_fetch_assoc($pemateri_list2)) {
+                                            $terpilih = $terpilih_id === (string) $pmt['id_pemateri'] ? ' selected' : '';
+                                            echo "<option value='" . (int) $pmt['id_pemateri'] . "'$terpilih>" . e($pmt['nama']) . ' - ' . e($pmt['keahlian']) . ' (' . e($pmt['institusi']) . ")</option>";
+                                        }
+                                        ?>
+                                    </select>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="tanggal" class="form-label small fw-semibold text-secondary">Tanggal Pelaksanaan</label>
+                                    <input type="date" class="form-control" id="tanggal" name="tanggal" value="<?= e(old('tanggal', (string) $sem_edit['tanggal'])) ?>" required>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="kuota_total" class="form-label small fw-semibold text-secondary">Kuota Total Peserta</label>
+                                    <input type="number" class="form-control" id="kuota_total" name="kuota_total" value="<?= e(old('kuota_total', (string) ($sem_edit['kuota_total'] ?? $sem_edit['kuota']))) ?>" min="<?= max(1, $pendaftar_edit) ?>" inputmode="numeric" required>
+                                    <div class="form-text text-muted small">Minimal <?= max(1, $pendaftar_edit) ?> (jumlah pendaftar saat ini). Sisa kuota dihitung otomatis.</div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="poster" class="form-label small fw-semibold text-secondary">Poster Baru (Max 5MB, opsional)</label>
+                                    <input type="file" class="form-control" id="poster" name="poster" accept=".jpg,.jpeg,.png,.webp">
+                                    <?php if (!empty($sem_edit['poster'])): ?>
+                                        <div class="form-text text-muted small">Poster saat ini: <?= e($sem_edit['poster']) ?>. Biarkan kosong bila tidak ingin mengganti.</div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="mt-4 pt-3 border-top d-flex justify-content-end gap-2">
+                                <a href="admin.php?page=dashboard" class="btn btn-light fw-semibold px-4">Batal</a>
+                                <button type="submit" name="edit_seminar" class="btn btn-primary px-4">
+                                    <i class="bi bi-save me-1"></i> Simpan Perubahan
                                 </button>
                             </div>
                         </form>
