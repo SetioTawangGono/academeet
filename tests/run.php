@@ -26,6 +26,13 @@ $check('checkin_window_error() hari ini = boleh', checkin_window_error($hariIni,
 $check('checkin_window_error() besok = ditolak', checkin_window_error('2026-11-08', $hariIni) !== null);
 $check('checkin_window_error() besok menyebut tanggal', str_contains((string) checkin_window_error('2026-11-08', $hariIni), '08 Nov 2026'));
 $check('checkin_window_error() format salah = ditolak', checkin_window_error('besok', $hariIni) !== null);
+
+// seminar_status_efektif(): Selesai bila status='Selesai' ATAU tanggal < hari ini.
+$check('seminar_status_efektif() status Selesai', seminar_status_efektif('Selesai', '2026-12-01', $hariIni) === 'Selesai');
+$check('seminar_status_efektif() tanggal lewat', seminar_status_efektif('Aktif', '2026-11-06', $hariIni) === 'Selesai');
+$check('seminar_status_efektif() hari ini tetap Aktif', seminar_status_efektif('Aktif', $hariIni, $hariIni) === 'Aktif');
+$check('seminar_status_efektif() besok Aktif', seminar_status_efektif('Aktif', '2026-11-08', $hariIni) === 'Aktif');
+$check('seminar_status_efektif() tanggal invalid tetap Aktif', seminar_status_efektif('Aktif', 'besok', $hariIni) === 'Aktif');
 $check('excel_cell() menetralkan formula', excel_cell('=1+1') === "'=1+1");
 $check('excel_cell() membiarkan teks biasa', excel_cell('Budi') === 'Budi');
 $check('excel_cell() menangkap formula ber-spasi', excel_cell('  =1+1') === "'  =1+1");

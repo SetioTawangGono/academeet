@@ -658,8 +658,11 @@ if (isset($_POST['reset_password'])) {
                                     $kondisi[] = "(judul LIKE '%$like_raw%' OR pemateri LIKE '%$like_raw%')";
                                 }
                                 if ($f_status !== '') {
-                                    $status_esc = mysqli_real_escape_string($conn, $f_status);
-                                    $kondisi[] = "status = '$status_esc'";
+                                    if ($f_status === 'Aktif') {
+                                        $kondisi[] = "status = 'Aktif' AND tanggal >= CURDATE()";
+                                    } else {
+                                        $kondisi[] = "(status = 'Selesai' OR tanggal < CURDATE())";
+                                    }
                                 }
                                 if ($f_tanggal !== '') {
                                     $kondisi[] = "tanggal = '$f_tanggal'";
@@ -675,14 +678,15 @@ if (isset($_POST['reset_password'])) {
                                         $img_src = !empty($row['poster'])
                                             ? "uploads/posters/" . $row['poster']
                                             : placeholder_data_uri('Acara');
-                                        $status_badge = $row['status'] === 'Aktif'
+                                        $status_efektif = seminar_status_efektif((string) $row['status'], (string) $row['tanggal'], date('Y-m-d'));
+                                        $status_badge = $status_efektif === 'Aktif'
                                             ? "<span class='badge badge-soft-success px-2 py-1 rounded-pill'><i class='bi bi-circle-fill me-1' style='font-size:.5rem;'></i>Aktif</span>"
                                             : "<span class='badge badge-soft-warning px-2 py-1 rounded-pill'><i class='bi bi-check-circle me-1'></i>Selesai</span>";
 
                                         $id_sem = (int) $row['id_seminar'];
                                         $judul_attr = e($row['judul']);
 
-                                        $aksi_selesai = $row['status'] === 'Aktif'
+                                        $aksi_selesai = $status_efektif === 'Aktif'
                                             ? "<button type='button' class='btn btn-sm btn-light-success fw-semibold js-selesai'
                                                 data-id='$id_sem' data-judul=\"$judul_attr\">
                                                 <i class='bi bi-check-circle me-1'></i>Selesai

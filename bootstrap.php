@@ -141,6 +141,21 @@ function checkin_window_error(string $tanggal, string $hariIni): ?string
     return null;
 }
 
+/**
+ * Status efektif seminar: "Selesai" bila status='Selesai' ATAU tanggal < hari ini.
+ * Dihitung saat dibaca; tidak menulis ke DB.
+ */
+function seminar_status_efektif(string $status, string $tanggal, string $hariIni): string
+{
+    if ($status === 'Selesai') {
+        return 'Selesai';
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal) && $tanggal < $hariIni) {
+        return 'Selesai';
+    }
+    return 'Aktif';
+}
+
 /** Avatar lokal (SVG data URI) pengganti layanan pihak ketiga. */
 function initials_avatar(string $name): string
 {
