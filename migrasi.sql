@@ -137,3 +137,63 @@ CREATE TABLE IF NOT EXISTS password_resets (
     CONSTRAINT fk_reset_user FOREIGN KEY (id_user)
         REFERENCES users (id_user) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- Paket C
+-- =====================================================
+
+-- Detail seminar lengkap (semua opsional kecuali kategori).
+-- jam_mulai / jam_selesai
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'jam_mulai');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN jam_mulai TIME NULL AFTER tanggal',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'jam_selesai');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN jam_selesai TIME NULL AFTER jam_mulai',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- lokasi
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'lokasi');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN lokasi VARCHAR(150) NULL AFTER jam_selesai',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- link_online
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'link_online');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN link_online VARCHAR(255) NULL AFTER lokasi',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- kategori (default 'Umum' untuk baris lama).
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'kategori');
+SET @sql := IF(@exists = 0,
+    "ALTER TABLE seminars ADD COLUMN kategori VARCHAR(30) NOT NULL DEFAULT 'Umum' AFTER link_online",
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- deskripsi
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'deskripsi');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN deskripsi TEXT NULL AFTER kategori',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Index kategori (filter katalog).
+SET @exists := (SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND index_name = 'idx_seminars_kategori');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD KEY idx_seminars_kategori (kategori)',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
