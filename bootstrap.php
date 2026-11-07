@@ -156,6 +156,48 @@ function seminar_status_efektif(string $status, string $tanggal, string $hariIni
     return 'Aktif';
 }
 
+/** Daftar program studi resmi. */
+function prodi_terdaftar(): array
+{
+    return ['Teknik Informatika', 'Sistem Informasi', 'Manajemen Informatika', 'Desain Komunikasi Visual'];
+}
+
+/** Panjang string, memakai mb_strlen bila tersedia. */
+function str_len(string $value): int
+{
+    return function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+}
+
+/**
+ * Validasi data diri (register & profil). Mengembalikan pesan error, atau '' bila valid.
+ * $prodiBolehLama: nilai prodi lama akun yang tetap boleh dipakai walau tak ada di daftar.
+ */
+function validasi_data_diri(string $nama, string $nim, string $prodi, string $email, array $prodiBolehLama = []): string
+{
+    if ($nama === '' || $email === '') {
+        return 'Nama dan email wajib diisi.';
+    }
+    if (str_len($nama) > 100) {
+        return 'Nama maksimal 100 karakter.';
+    }
+    if (str_len($nim) > 20) {
+        return 'NIM maksimal 20 karakter.';
+    }
+    if (str_len($email) > 100) {
+        return 'Email maksimal 100 karakter.';
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return 'Format email tidak valid.';
+    }
+    if ($prodi === '') {
+        return 'Program studi wajib dipilih.';
+    }
+    if (!in_array($prodi, prodi_terdaftar(), true) && !in_array($prodi, $prodiBolehLama, true)) {
+        return 'Program studi tidak dikenali. Pilih dari daftar.';
+    }
+    return '';
+}
+
 /** Avatar lokal (SVG data URI) pengganti layanan pihak ketiga. */
 function initials_avatar(string $name): string
 {

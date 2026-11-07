@@ -33,6 +33,17 @@ $check('seminar_status_efektif() tanggal lewat', seminar_status_efektif('Aktif',
 $check('seminar_status_efektif() hari ini tetap Aktif', seminar_status_efektif('Aktif', $hariIni, $hariIni) === 'Aktif');
 $check('seminar_status_efektif() besok Aktif', seminar_status_efektif('Aktif', '2026-11-08', $hariIni) === 'Aktif');
 $check('seminar_status_efektif() tanggal invalid tetap Aktif', seminar_status_efektif('Aktif', 'besok', $hariIni) === 'Aktif');
+
+// validasi_data_diri()
+$check('validasi_data_diri() valid', validasi_data_diri('Budi', '123', 'Teknik Informatika', 'budi@kampus.ac.id') === '');
+$check('validasi_data_diri() email salah', validasi_data_diri('Budi', '123', 'Teknik Informatika', 'bukan-email') !== '');
+$check('validasi_data_diri() prodi tak dikenal ditolak', validasi_data_diri('Budi', '123', 'Astronomi', 'budi@kampus.ac.id') !== '');
+$check('validasi_data_diri() prodi lama dipertahankan', validasi_data_diri('Budi', '123', 'Astronomi Lama', 'budi@kampus.ac.id', ['Astronomi Lama']) === '');
+$check('validasi_data_diri() nama > 100 ditolak', validasi_data_diri(str_repeat('a', 101), '123', 'Teknik Informatika', 'budi@kampus.ac.id') !== '');
+$check('validasi_data_diri() nama 100 diterima', validasi_data_diri(str_repeat('a', 100), '123', 'Teknik Informatika', 'budi@kampus.ac.id') === '');
+$check('validasi_data_diri() nim > 20 ditolak', validasi_data_diri('Budi', str_repeat('9', 21), 'Teknik Informatika', 'budi@kampus.ac.id') !== '');
+$check('validasi_data_diri() email > 100 ditolak', validasi_data_diri('Budi', '123', 'Teknik Informatika', str_repeat('a', 95) . '@x.com') !== '');
+$check('prodi_terdaftar() non-kosong', count(prodi_terdaftar()) >= 4);
 $check('excel_cell() menetralkan formula', excel_cell('=1+1') === "'=1+1");
 $check('excel_cell() membiarkan teks biasa', excel_cell('Budi') === 'Budi');
 $check('excel_cell() menangkap formula ber-spasi', excel_cell('  =1+1') === "'  =1+1");

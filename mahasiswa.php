@@ -20,55 +20,59 @@ if (isset($_POST['update_profil'])) {
     $prodi = trim((string) ($_POST['prodi'] ?? ''));
     $email = trim((string) ($_POST['email'] ?? ''));
 
-    if ($nama === '' || $email === '') {
-        flash_set('danger', 'Nama dan email wajib diisi.');
-        redirect('mahasiswa.php?page=profil');
-    }
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        flash_set('danger', 'Format email tidak valid.');
-        redirect('mahasiswa.php?page=profil');
-    }
+    $row_now = mysqli_fetch_assoc(mysqli_query($conn, "SELECT prodi FROM users WHERE id_user = $id_user"));
+    $prodi_lama = $row_now ? (string) $row_now['prodi'] : '';
 
-    $stmt = mysqli_prepare($conn, "SELECT id_user FROM users WHERE (email = ? OR (nim = ? AND nim <> '')) AND id_user <> ? LIMIT 1");
-    mysqli_stmt_bind_param($stmt, 'ssi', $email, $nim, $id_user);
-    mysqli_stmt_execute($stmt);
-    $dupe = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
-    mysqli_stmt_close($stmt);
-
-    if ($dupe) {
-        flash_set('danger', 'Email atau NIM sudah digunakan akun lain.');
+    $err = validasi_data_diri($nama, $nim, $prodi, $email, [$prodi_lama]);
+    if ($err !== '') {
+        flash_set('danger', $err);
         redirect('mahasiswa.php?page=profil');
     }
 
     try {
-        $new_foto = upload_image($_FILES['foto'] ?? [], 'profiles', 2000000);
-    } catch (Throwable $ex) {
-        flash_set('danger', $ex->getMessage());
-        redirect('mahasiswa.php?page=profil');
-    }
+        $stmt = mysqli_prepare($conn, "SELECT id_user FROM users WHERE (email = ? OR (nim = ? AND nim <> '')) AND id_user <> ? LIMIT 1");
+        mysqli_stmt_bind_param($stmt, 'ssi', $email, $nim, $id_user);
+        mysqli_stmt_execute($stmt);
+        $dupe = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
 
-    $old = mysqli_fetch_assoc(mysqli_query($conn, "SELECT foto FROM users WHERE id_user = $id_user"));
-    $sql = "UPDATE users SET nama_lengkap = ?, nim = ?, prodi = ?, email = ?" . ($new_foto ? ", foto = ?" : "") . " WHERE id_user = ?";
-    $stmt = mysqli_prepare($conn, $sql);
-    if ($new_foto) {
-        mysqli_stmt_bind_param($stmt, 'sssssi', $nama, $nim, $prodi, $email, $new_foto, $id_user);
-    } else {
-        mysqli_stmt_bind_param($stmt, 'ssssi', $nama, $nim, $prodi, $email, $id_user);
-    }
-    $ok = mysqli_stmt_execute($stmt);
-    mysqli_stmt_close($stmt);
-
-    if ($ok) {
-        $_SESSION['nama'] = $nama;
-        if ($new_foto && !empty($old['foto']) && file_exists("uploads/profiles/" . $old['foto'])) {
-            @unlink("uploads/profiles/" . $old['foto']);
+        if ($dupe) {
+            throw new RuntimeException('Email atau NIM sudah digunakan akun lain.');
         }
-        flash_set('success', 'Profil berhasil diperbarui.');
-    } else {
-        if ($new_foto && file_exists("uploads/profiles/" . $new_foto)) {
+
+        try {
+            $new_foto = upload_image($_FILES['foto'] ?? [], 'profiles', 2000000);
+        } catch (Throwable $ex) {
+            throw new RuntimeException($ex->getMessage());
+        }
+
+        $old = mysqli_fetch_assoc(mysqli_query($conn, "SELECT foto FROM users WHERE id_user = $id_user"));
+        $nim_simpan = $nim === '' ? null : $nim;
+        $sql = "UPDATE users SET nama_lengkap = ?, nim = ?, prodi = ?, email = ?" . ($new_foto ? ", foto = ?" : "") . " WHERE id_user = ?";
+        $stmt = mysqli_prepare($conn, $sql);
+        if ($new_foto) {
+            mysqli_stmt_bind_param($stmt, 'sssss' . 'i', $nama, $nim_simpan, $prodi, $email, $new_foto, $id_user);
+        } else {
+            mysqli_stmt_bind_param($stmt, 'ssss' . 'i', $nama, $nim_simpan, $prodi, $email, $id_user);
+        }
+        $ok = mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+
+        if ($ok) {
+            $_SESSION['nama'] = $nama;
+            if ($new_foto && !empty($old['foto']) && file_exists("uploads/profiles/" . $old['foto'])) {
+                @unlink("uploads/profiles/" . $old['foto']);
+            }
+            flash_set('success', 'Profil berhasil diperbarui.');
+        } else {
+            throw new RuntimeException('Gagal memperbarui data ke database.');
+        }
+    } catch (Throwable $ex) {
+        if (isset($new_foto) && $new_foto && file_exists("uploads/profiles/" . $new_foto)) {
             @unlink("uploads/profiles/" . $new_foto);
         }
-        flash_set('danger', 'Gagal memperbarui data ke database.');
+        $errno = mysqli_errno($conn);
+        flash_set('danger', $errno === 1062 ? 'Email atau NIM sudah digunakan.' : $ex->getMessage());
     }
     redirect('mahasiswa.php?page=profil');
 }
@@ -353,7 +357,16 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                                 </div>
                                 <div class="col-md-6">
                                     <label for="prodi" class="form-label small fw-bold text-secondary">Program Studi</label>
-                                    <input type="text" class="form-control" id="prodi" name="prodi" maxlength="100" value="<?= e($user['prodi']) ?>" placeholder="Contoh: Teknik Informatika">
+                                    <?php $prodi_sekarang = (string) $user['prodi']; $prodi_asing = $prodi_sekarang !== '' && !in_array($prodi_sekarang, prodi_terdaftar(), true); ?>
+                                    <select class="form-select" id="prodi" name="prodi" required>
+                                        <option value="" disabled <?= $prodi_sekarang === '' ? 'selected' : '' ?>>Pilih Program Studi...</option>
+                                        <?php foreach (prodi_terdaftar() as $opsi_prodi): ?>
+                                            <option value="<?= e($opsi_prodi) ?>" <?= $prodi_sekarang === $opsi_prodi ? 'selected' : '' ?>><?= e($opsi_prodi) ?></option>
+                                        <?php endforeach; ?>
+                                        <?php if ($prodi_asing): ?>
+                                            <option value="<?= e($prodi_sekarang) ?>" selected><?= e($prodi_sekarang) ?> (lama)</option>
+                                        <?php endif; ?>
+                                    </select>
                                 </div>
                                 <div class="col-12">
                                     <label for="foto" class="form-label small fw-bold text-secondary">Foto Profil Baru</label>

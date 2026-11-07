@@ -2,7 +2,7 @@
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
 
-$old = ['nama_lengkap' => '', 'nim' => '', 'prodi' => '', 'email' => '', 'prodi_lain' => ''];
+$old = ['nama_lengkap' => '', 'nim' => '', 'prodi' => '', 'email' => ''];
 $field_error = '';
 
 if (isset($_POST['register'])) {
@@ -14,7 +14,6 @@ if (isset($_POST['register'])) {
     $email = trim((string) ($_POST['email'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
     $confirm  = (string) ($_POST['password_confirm'] ?? '');
-    $prodi_terdaftar = ['Teknik Informatika', 'Sistem Informasi', 'Manajemen Informatika', 'Desain Komunikasi Visual'];
 
     if ($nama !== '') {
         $old['nama_lengkap'] = $nama;
@@ -25,38 +24,32 @@ if (isset($_POST['register'])) {
     if ($email !== '') {
         $old['email'] = $email;
     }
-    if (in_array($prodi, $prodi_terdaftar, true)) {
+    if (in_array($prodi, prodi_terdaftar(), true)) {
         $old['prodi'] = $prodi;
-    } elseif ($prodi !== '') {
-        // Prodi dari luar daftar disimpan supaya tidak hilang saat validasi gagal.
-        $old['prodi'] = 'lainnya';
-        $old['prodi_lain'] = $prodi;
     }
 
-    if ($nama === '' || $nim === '' || $prodi === '' || $email === '') {
-        $field_error = 'Semua kolom wajib diisi.';
-    } elseif (!in_array($prodi, $prodi_terdaftar, true)) {
-        $field_error = 'Program studi tidak dikenali. Pilih dari daftar.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $field_error = 'Format email tidak valid.';
-    } elseif (!password_ok($password)) {
+    $field_error = validasi_data_diri($nama, $nim, $prodi, $email);
+    if ($field_error === '' && !password_ok($password)) {
         $field_error = 'Password minimal 8 karakter.';
-    } elseif ($password !== $confirm) {
+    } elseif ($field_error === '' && $password !== $confirm) {
         $field_error = 'Konfirmasi password tidak cocok.';
-    } else {
-        $stmt = mysqli_prepare($conn, "SELECT id_user FROM users WHERE email = ? OR (nim = ? AND nim <> '') LIMIT 1");
-        mysqli_stmt_bind_param($stmt, 'ss', $email, $nim);
-        mysqli_stmt_execute($stmt);
-        $exists = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
-        mysqli_stmt_close($stmt);
+    } elseif ($field_error === '') {
+        try {
+            $stmt = mysqli_prepare($conn, "SELECT id_user FROM users WHERE email = ? OR (nim = ? AND nim <> '') LIMIT 1");
+            mysqli_stmt_bind_param($stmt, 'ss', $email, $nim);
+            mysqli_stmt_execute($stmt);
+            $exists = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+            mysqli_stmt_close($stmt);
 
-        if ($exists) {
-            $field_error = 'Email atau NIM sudah digunakan.';
-        } else {
+            if ($exists) {
+                throw new RuntimeException('Email atau NIM sudah digunakan.');
+            }
+
             $hash = password_hash($password, PASSWORD_DEFAULT);
             $role = 'mahasiswa';
+            $nim_simpan = $nim === '' ? null : $nim;
             $stmt = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, nim, prodi, email, password, role) VALUES (?, ?, ?, ?, ?, ?)");
-            mysqli_stmt_bind_param($stmt, 'ssssss', $nama, $nim, $prodi, $email, $hash, $role);
+            mysqli_stmt_bind_param($stmt, 'ssssss', $nama, $nim_simpan, $prodi, $email, $hash, $role);
             $ok = mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
 
@@ -64,7 +57,9 @@ if (isset($_POST['register'])) {
                 flash_set('success', 'Pendaftaran berhasil! Silakan login.');
                 redirect('index.php');
             }
-            $field_error = 'Pendaftaran gagal. Email atau NIM mungkin sudah digunakan.';
+            throw new RuntimeException('Pendaftaran gagal. Coba lagi.');
+        } catch (Throwable $ex) {
+            $field_error = mysqli_errno($conn) === 1062 ? 'Email atau NIM sudah digunakan.' : $ex->getMessage();
         }
     }
     $_SESSION['_old'] = $old;
@@ -139,14 +134,11 @@ if (isset($_SESSION['_flash_error'])) {
                                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-mortarboard"></i></span>
                                 <select name="prodi" id="prodi" class="form-select border-start-0 ps-0" required>
                                     <option value="" disabled <?= $old['prodi'] === '' ? 'selected' : '' ?>>Pilih Program Studi...</option>
-                                    <?php foreach (['Teknik Informatika', 'Sistem Informasi', 'Manajemen Informatika', 'Desain Komunikasi Visual'] as $opsi): ?>
+                                    <?php foreach (prodi_terdaftar() as $opsi): ?>
                                         <option value="<?= e($opsi) ?>" <?= $old['prodi'] === $opsi ? 'selected' : '' ?>><?= e($opsi) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <?php if ($old['prodi'] === 'lainnya'): ?>
-                                <input type="text" name="prodi" id="prodi_lain" aria-label="Program studi lainnya" class="form-control mt-2" placeholder="Tulis program studi" value="<?= e($old['prodi_lain']) ?>" maxlength="100">
-                            <?php endif; ?>
                         </div>
                     </div>
 
