@@ -13,6 +13,49 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+/** Peta header keamanan HTTP. HSTS hanya saat HTTPS. */
+function security_headers(bool $https): array
+{
+    $cdn = 'https://cdn.jsdelivr.net';
+    $csp = "default-src 'self'; "
+        . "script-src 'self' 'unsafe-inline' $cdn; "
+        . "style-src 'self' 'unsafe-inline' $cdn; "
+        . "font-src 'self' data: $cdn; "
+        . "img-src 'self' data: blob:; "
+        . "media-src 'self' blob:; "
+        . "connect-src 'self'; "
+        . "object-src 'none'; "
+        . "base-uri 'self'; "
+        . "form-action 'self'; "
+        . "frame-ancestors 'self'";
+
+    $headers = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options' => 'SAMEORIGIN',
+        'Referrer-Policy' => 'strict-origin-when-cross-origin',
+        'Permissions-Policy' => 'camera=(self), microphone=(), geolocation=()',
+        'Content-Security-Policy' => $csp,
+    ];
+    if ($https) {
+        $headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+    }
+    return $headers;
+}
+
+/** Kirim header keamanan sekali. Dipanggil sebelum output apa pun. */
+function send_security_headers(): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    foreach (security_headers($https) as $name => $value) {
+        header($name . ': ' . $value);
+    }
+}
+
+send_security_headers();
+
 /** Escape output HTML. */
 function e($value): string
 {

@@ -44,6 +44,17 @@ $check('validasi_data_diri() nama 100 diterima', validasi_data_diri(str_repeat('
 $check('validasi_data_diri() nim > 20 ditolak', validasi_data_diri('Budi', str_repeat('9', 21), 'Teknik Informatika', 'budi@kampus.ac.id') !== '');
 $check('validasi_data_diri() email > 100 ditolak', validasi_data_diri('Budi', '123', 'Teknik Informatika', str_repeat('a', 95) . '@x.com') !== '');
 $check('prodi_terdaftar() non-kosong', count(prodi_terdaftar()) >= 4);
+
+// security_headers()
+$sh_http = security_headers(false);
+$sh_https = security_headers(true);
+$check('security_headers() nosniff', ($sh_http['X-Content-Type-Options'] ?? '') === 'nosniff');
+$check('security_headers() X-Frame-Options SAMEORIGIN', ($sh_http['X-Frame-Options'] ?? '') === 'SAMEORIGIN');
+$check('security_headers() HSTS absen tanpa HTTPS', !isset($sh_http['Strict-Transport-Security']));
+$check('security_headers() HSTS ada saat HTTPS', isset($sh_https['Strict-Transport-Security']));
+$check('security_headers() CSP frame-ancestors', str_contains($sh_http['Content-Security-Policy'] ?? '', "frame-ancestors 'self'"));
+$check('security_headers() CSP object-src none', str_contains($sh_http['Content-Security-Policy'] ?? '', "object-src 'none'"));
+$check('security_headers() CSP punya host CDN', str_contains($sh_http['Content-Security-Policy'] ?? '', 'https://cdn.jsdelivr.net'));
 $check('excel_cell() menetralkan formula', excel_cell('=1+1') === "'=1+1");
 $check('excel_cell() membiarkan teks biasa', excel_cell('Budi') === 'Budi');
 $check('excel_cell() menangkap formula ber-spasi', excel_cell('  =1+1') === "'  =1+1");
