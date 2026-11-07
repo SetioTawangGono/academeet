@@ -10,7 +10,8 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF**, QR dibuat d
 
 | File | Fungsi |
 |------|--------|
-| `bootstrap.php` | Fondasi bersama: session hardening, timezone, `e()`, CSRF, flash, `require_role()`, helper tiket/password/upload/pagination. |
+| `bootstrap.php` | Fondasi bersama: session hardening, timezone, `e()`, CSRF, flash, `require_role()`, helper tiket/password/upload/pagination, validasi data diri (`validasi_data_diri()`, `prodi_terdaftar()`), jendela check-in, status efektif, header keamanan. |
+| `services.php` | Logika DB (transaksi): `batalkan_pendaftaran()`, `ubah_seminar()`. Dipanggil `mahasiswa.php`, `admin.php`, dan tes. |
 | `index.php` | Login (throttle 5 percobaan/15 menit, pesan generik, `session_regenerate_id`). |
 | `register.php` | Registrasi mahasiswa + validasi server + CSRF. |
 | `logout.php` | Hapus session & cookie, redirect ke login. |
@@ -24,6 +25,8 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF**, QR dibuat d
 | `database.sql` | Skema lengkap untuk instalasi baru (+ index & foreign key). |
 | `migrasi.sql` | Migrasi idempoten untuk database yang sudah berjalan. |
 | `tests/run.php` | Self-check helper tanpa dependency (`php tests/run.php`). |
+| `tests/run_db.php` | Tes fungsi DB `services.php`. **Hanya** untuk database bernama `*_test` (mis. `academeet_paketa_test`); menolak berjalan di DB lain. |
+| `tools/tutup_seminar.php` | CLI: tandai seminar `Aktif` yang tanggalnya lewat menjadi `Selesai`. |
 | `uploads/.htaccess` | Blokir eksekusi skrip & directory listing di folder upload. |
 
 ---
@@ -38,12 +41,17 @@ mysql -u root < database.sql
 mysql -u root academeet < migrasi.sql
 ```
 
+> **Penting:** `migrasi.sql` mengawali dengan `USE academeet;`, jadi selalu menargetkan database live meski dijalankan dengan nama DB lain. Untuk menguji di database salinan, hapus baris `USE` pada salinan sementara lalu jalankan `mysql -D <nama_db_salinan> < salinan.sql`.
+
 Tabel: `users`, `pemateri`, `seminars`, `registrations`.
 
 Batasan penting:
 - `registrations` punya `UNIQUE (id_user, id_seminar)` — satu mahasiswa satu tiket per seminar.
 - `registrations.kode_tiket` unik, format `ACD-` + 6 hex acak.
+- `users.nim` punya `UNIQUE KEY uq_users_nim` (NIM kosong disimpan `NULL`, boleh banyak NULL).
 - Foreign key: registrasi → user/seminar (`ON DELETE CASCADE`), seminar → pemateri (`ON DELETE SET NULL`).
+
+Kolom `kuota_total` (di `seminars`) menyimpan kuota awal/total; kolom `kuota` menyimpan sisa kursi. Migrasi mengisinya dengan `kuota + jumlah pendaftar`. Bila ada NIM ganda, migrasi menampilkan `PERINGATAN: NIM ganda, UNIQUE tidak ditambahkan` dan melewati pembuatan indeks unik (tanpa mengubah data NIM).
 
 ### Kredensial database
 
@@ -69,6 +77,7 @@ Batasan penting:
   - Catatan deployment: proteksi ini butuh Apache dengan `AllowOverride` yang mengizinkan `.htaccess`. Di nginx atau `AllowOverride None`, nonaktifkan eksekusi PHP untuk folder `uploads/` di konfigurasi server.
 - Export Excel menetralkan formula injection (`excel_cell()`).
 - QR tiket dirender di browser (kode tiket tidak dikirim ke layanan pihak ketiga); avatar/placeholder dibuat lokal.
+- **Header keamanan HTTP** dikirim sekali di `bootstrap.php`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()`, `Strict-Transport-Security` (hanya HTTPS), dan `Content-Security-Policy` (`default-src 'self'`; `script-src`/`style-src`/`font-src` mengizinkan `'unsafe-inline'` + `https://cdn.jsdelivr.net`; `img-src 'self' data: blob:`; `object-src 'none'`; `frame-ancestors 'self'`).
 
 ---
 
@@ -76,8 +85,9 @@ Batasan penting:
 
 | Parameter | Fitur |
 |-----------|-------|
-| `dashboard` | Statistik + daftar seminar (search & pagination server-side), aksi Selesai/Hapus. |
+| `dashboard` | Statistik + daftar seminar (search & pagination server-side), aksi Edit/Selesai/Hapus. Status efektif: seminar bertanggal lampau dianggap Selesai dan tidak bisa diedit. |
 | `tambah` | Tambah seminar: judul, pemateri, tanggal, kuota, poster. |
+| `edit_seminar` | Edit seminar (hanya untuk seminar efektif Aktif). Kuota adalah **kuota total**; sisa = total − jumlah pendaftar, total tidak boleh kurang dari jumlah pendaftar. Poster baru opsional. |
 | `scan` | Check-in via kode tiket (manual atau scan kamera). Idempoten: tiket yang sudah hadir ditolak. |
 | `mahasiswa` | Daftar mahasiswa (search & pagination), detail, hapus. |
 | `detail_mahasiswa` | Profil, statistik, riwayat tiket, reset password. |
@@ -95,11 +105,13 @@ Penghapusan berjalan dalam transaksi:
 
 | Parameter | Fitur |
 |-----------|-------|
-| `katalog` | Seminar aktif (`status='Aktif'`, `kuota>0`, tanggal belum lewat) + tombol daftar. |
-| `tiket` | Tiket + QR, status kehadiran, unduh sertifikat bila sudah hadir. |
-| `profil` | Edit data diri, upload foto (JPG/PNG/WebP maks 2MB), ubah password. |
+| `katalog` | Seminar aktif (`status='Aktif'`, tanggal belum lewat) + label "terisi/total" & badge "Penuh"; tombol daftar nonaktif saat kuota habis. |
+| `tiket` | Tiket + QR, status kehadiran, unduh sertifikat bila sudah hadir, tombol **Batalkan** (seminar Aktif, tanggal > hari ini, tiket Belum Hadir). |
+| `profil` | Edit data diri (validasi sama dengan registrasi), upload foto (JPG/PNG/WebP maks 2MB), ubah password. |
 
-Pendaftaran berjalan atomik (`SELECT ... FOR UPDATE`): kuota, status, tanggal, dan duplikasi dicek di dalam transaksi; kuota dikurangi hanya jika insert berhasil.
+Pendaftaran berjalan atomik (`SELECT ... FOR UPDATE`): kuota, status, tanggal, dan duplikasi dicek di dalam transaksi; kuota dikurangi hanya jika insert berhasil. Pembatalan (`batalkan_pendaftaran()`) juga atomik: baris tiket + seminar dikunci, lalu kuota dikembalikan dengan batas `LEAST(kuota+1, kuota_total)`.
+
+Check-in hanya bisa pada hari H (zona Asia/Jakarta). Seminar yang tanggalnya sudah lewat dianggap Selesai saat dibaca (tanpa menulis DB); `tools/tutup_seminar.php` menyinkronkan status di DB via CLI.
 
 ---
 
@@ -131,4 +143,8 @@ Akun admin dibuat manual di tabel `users` dengan `role='admin'` dan password has
 ```bash
 C:\xampp\php\php.exe tests/run.php
 C:\xampp\php\php.exe -l admin.php   # cek sintaks
+
+# Tes fungsi DB — HANYA di database *_test:
+set ACADEMEET_DB_NAME=academeet_paketa_test
+C:\xampp\php\php.exe tests/run_db.php
 ```
