@@ -207,6 +207,12 @@ function password_ok(string $password): bool
     return strlen($password) >= 8;
 }
 
+/** Password akun admin baru: minimal 12 karakter (lebih ketat dari mahasiswa). */
+function password_ok_admin(string $password): bool
+{
+    return strlen($password) >= 12;
+}
+
 /**
  * Jendela check-in: hanya boleh pada hari H. Mengembalikan pesan error tanggal,
  * atau null bila boleh check-in. Tanggal tidak valid dianggap jauh di masa depan.

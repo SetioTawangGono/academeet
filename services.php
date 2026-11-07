@@ -149,3 +149,51 @@ function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poste
         return ['danger', $ex->getMessage(), false];
     }
 }
+
+/**
+ * Buat akun admin baru (dipakai tools/buat_admin.php). Tidak untuk DB live manual.
+ * Validasi: nama <=100, email valid & <=100 & belum dipakai, password >=12.
+ * Kolom wajib lain mengikuti skema: nim/prodi/foto NULL, role 'admin'.
+ * Mengembalikan ['success'|'danger', pesan, id_user|null].
+ */
+function buat_admin(mysqli $conn, string $nama, string $email, string $password): array
+{
+    $nama = trim($nama);
+    $email = trim($email);
+
+    if ($nama === '' || $email === '') {
+        return ['danger', 'Nama dan email wajib diisi.', null];
+    }
+    if (str_len($nama) > 100) {
+        return ['danger', 'Nama maksimal 100 karakter.', null];
+    }
+    if (str_len($email) > 100 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return ['danger', 'Format email tidak valid atau lebih dari 100 karakter.', null];
+    }
+    if (!password_ok_admin($password)) {
+        return ['danger', 'Password admin minimal 12 karakter.', null];
+    }
+
+    $stmt = mysqli_prepare($conn, "SELECT id_user FROM users WHERE email = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 's', $email);
+    mysqli_stmt_execute($stmt);
+    $ada = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    if ($ada) {
+        return ['danger', 'Email sudah dipakai akun lain.', null];
+    }
+
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $role = 'admin';
+    $stmt = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, email, password, role) VALUES (?, ?, ?, ?)");
+    mysqli_stmt_bind_param($stmt, 'ssss', $nama, $email, $hash, $role);
+    $ok = mysqli_stmt_execute($stmt);
+    if (!$ok) {
+        $errno = mysqli_errno($conn);
+        mysqli_stmt_close($stmt);
+        return ['danger', $errno === 1062 ? 'Email sudah dipakai akun lain.' : 'Gagal membuat akun admin.', null];
+    }
+    $id = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($stmt);
+    return ['success', 'Akun admin berhasil dibuat.', $id];
+}
