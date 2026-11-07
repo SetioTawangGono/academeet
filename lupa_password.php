@@ -43,7 +43,7 @@ if (isset($_POST['minta_reset'])) {
         if ($row) {
             $token = buat_token_reset($conn, (int) $row['id_user']);
             if ($token !== null) {
-                $base = (string) (getenv('ACADEMEET_BASE_URL') ?: '');
+                $base = env_secret('ACADEMEET_BASE_URL');
                 if ($base !== '') {
                     kirim_email($row['email'], 'Reset Password AcadeMeet', isi_email_reset($base, $token));
                 } else {

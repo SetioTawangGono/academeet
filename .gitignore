@@ -1,2 +1,5 @@
 uploads/
 *.zip
+# Rahasia lokal (mis. secrets SMTP) — jangan pernah di-commit.
+*.ini
+academeet-secrets*

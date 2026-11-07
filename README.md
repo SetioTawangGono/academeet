@@ -88,6 +88,22 @@ Kolom `kuota_total` (di `seminars`) menyimpan kuota awal/total; kolom `kuota` me
 
 Bila `ACADEMEET_BASE_URL` atau SMTP belum diset, `kirim_email()` gagal dengan `error_log` (tanpa isi email) dan halaman tetap menampilkan respons generik.
 
+#### Kredensial tanpa menyentuh repo
+
+Env di atas bisa juga diletakkan di file **di luar repo** (default `C:\xampp\academeet-secrets.ini`, override dengan env `ACADEMEET_SECRETS_FILE`). Format tiap baris `KUNCI=nilai` (`#` untuk komentar). Env asli selalu menang atas file. Ini cara yang disarankan untuk password SMTP di XAMPP Windows (tak perlu ubah konfigurasi Apache, kredensial tak masuk git).
+
+Contoh `C:\xampp\academeet-secrets.ini`:
+
+```
+ACADEMEET_BASE_URL=http://localhost/academeet
+ACADEMEET_SMTP_HOST=sandbox.smtp.mailtrap.io
+ACADEMEET_SMTP_PORT=587
+ACADEMEET_SMTP_SECURE=tls
+ACADEMEET_SMTP_FROM=noreply@academeet.local
+ACADEMEET_SMTP_USER=isi-dari-mailtrap
+ACADEMEET_SMTP_PASS=isi-dari-mailtrap
+```
+
 ---
 
 ## 🔐 Keamanan

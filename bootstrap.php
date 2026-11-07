@@ -216,6 +216,35 @@ function password_ok_admin(string $password): bool
 }
 
 /**
+ * Ambil env var, fallback ke file secrets DI LUAR repo (default C:\xampp\academeet-secrets.ini).
+ * Format tiap baris: KUNCI=nilai (# untuk komentar). Dipakai agar kredensial (SMTP) tak
+ * masuk repo. File dibaca sekali per request; nilai env asli selalu menang.
+ */
+function env_secret(string $key, string $default = ''): string
+{
+    static $file = null;
+    $val = getenv($key);
+    if ($val !== false && $val !== '') {
+        return $val;
+    }
+    if ($file === null) {
+        $path = getenv('ACADEMEET_SECRETS_FILE') ?: 'C:/xampp/academeet-secrets.ini';
+        $file = [];
+        if (is_file($path) && is_readable($path)) {
+            foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                $line = trim($line);
+                if ($line === '' || $line[0] === '#' || !str_contains($line, '=')) {
+                    continue;
+                }
+                [$k, $v] = explode('=', $line, 2);
+                $file[trim($k)] = trim($v);
+            }
+        }
+    }
+    return $file[$key] ?? $default;
+}
+
+/**
  * Kunci throttle: SHA-256 dari "scope|nilai". Email/nilai dinormalisasi lowercase
  * oleh pemanggil. Disimpan sebagai hash agar nilai asli (email/IP) tak tersimpan mentah.
  */

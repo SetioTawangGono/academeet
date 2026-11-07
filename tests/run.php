@@ -45,6 +45,19 @@ $check('isi_email_reset() sebut masa berlaku', str_contains($isiEmail, '30 menit
 $isiEmailSlash = isi_email_reset('http://localhost/academeet/', 'tok');
 $check('isi_email_reset() base trailing slash tetap rapi', str_contains($isiEmailSlash, 'academeet/reset_password.php?token=tok'));
 
+// env_secret(): env asli menang; fallback ke file (diuji via file sementara).
+$tmpSecret = sys_get_temp_dir() . '/academeet_secret_test.ini';
+file_put_contents($tmpSecret, "ACADEMEET_TEST_KEY=nilai-file\n# komentar\nACADEMEET_TEST_EMPTY=\n");
+$oldSecretFile = getenv('ACADEMEET_SECRETS_FILE');
+putenv('ACADEMEET_SECRETS_FILE=' . $tmpSecret);
+$check('env_secret() baca dari file', env_secret('ACADEMEET_TEST_KEY') === 'nilai-file');
+$check('env_secret() missing = default', env_secret('ACADEMEET_TIDAK_ADA', 'def') === 'def');
+putenv('ACADEMEET_TEST_ENV=env-menang');
+$check('env_secret() env asli menang atas file', env_secret('ACADEMEET_TEST_ENV') === 'env-menang');
+if ($oldSecretFile === false) { putenv('ACADEMEET_SECRETS_FILE'); } else { putenv('ACADEMEET_SECRETS_FILE=' . $oldSecretFile); }
+putenv('ACADEMEET_TEST_ENV');
+@unlink($tmpSecret);
+
 // checkin_window_error(): kemarin boleh, hari ini boleh, besok ditolak, format salah ditolak.
 $hariIni = '2026-11-07';
 $check('checkin_window_error() kemarin = boleh', checkin_window_error('2026-11-06', $hariIni) === null);

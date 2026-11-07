@@ -27,21 +27,21 @@ function isi_email_reset(string $baseUrl, string $token): string
         . "Salam,\nAcadeMeet";
 }
 
-/** Konfigurasi SMTP dari env. Mengembalikan array atau null bila belum lengkap. */
+/** Konfigurasi SMTP dari env (atau file secrets di luar repo). Null bila belum lengkap. */
 function smtp_config(): ?array
 {
-    $host = getenv('ACADEMEET_SMTP_HOST');
-    $from = getenv('ACADEMEET_SMTP_FROM');
-    $base = getenv('ACADEMEET_BASE_URL');
-    if (!$host || !$from || !$base) {
+    $host = env_secret('ACADEMEET_SMTP_HOST');
+    $from = env_secret('ACADEMEET_SMTP_FROM');
+    $base = env_secret('ACADEMEET_BASE_URL');
+    if ($host === '' || $from === '' || $base === '') {
         return null;
     }
     return [
         'host'   => $host,
-        'port'   => (int) (getenv('ACADEMEET_SMTP_PORT') ?: 587),
-        'secure' => (string) (getenv('ACADEMEET_SMTP_SECURE') ?: 'tls'),
-        'user'   => (string) (getenv('ACADEMEET_SMTP_USER') ?: ''),
-        'pass'   => (string) (getenv('ACADEMEET_SMTP_PASS') ?: ''),
+        'port'   => (int) (env_secret('ACADEMEET_SMTP_PORT', '587') ?: 587),
+        'secure' => env_secret('ACADEMEET_SMTP_SECURE', 'tls'),
+        'user'   => env_secret('ACADEMEET_SMTP_USER'),
+        'pass'   => env_secret('ACADEMEET_SMTP_PASS'),
         'from'   => $from,
         'base'   => rtrim($base, '/'),
     ];
