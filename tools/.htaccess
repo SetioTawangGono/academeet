@@ -1,0 +1,2 @@
+# Folder tools hanya untuk CLI. Tolak semua akses web.
+Require all denied

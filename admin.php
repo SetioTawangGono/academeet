@@ -410,10 +410,11 @@ if (isset($_POST['reset_password'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($judul_halaman) ?> - AcadeMeet</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.9">
+    <link rel="stylesheet" href="style.css?v=2.10">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -586,7 +587,7 @@ if (isset($_POST['reset_password'])) {
                 </div>
 
                 <!-- Tabel Seminar Aktif -->
-                <div class="card card-custom overflow-hidden">
+                <div class="card card-custom card-static overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Daftar Seminar</h6>
                         <div class="admin-toolbar">
@@ -685,7 +686,7 @@ if (isset($_POST['reset_password'])) {
                                             : "";
 
                                         echo "<tr>
-                                                <td><img src='" . e($img_src) . "' alt='Poster " . e($row['judul']) . "' class='rounded-3 shadow-sm border' width='80' height='50' style='object-fit:cover;'></td>
+                                                <td><img src='" . e($img_src) . "' alt='Poster " . e($row['judul']) . "' class='rounded-3 shadow-sm border' width='80' height='50' loading='lazy' decoding='async' style='object-fit:cover;'></td>
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
                                                 <td class='text-secondary'>" . e($row['pemateri']) . "</td>
                                                 <td class='text-muted small'><i class='bi bi-clock me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "</td>
@@ -782,7 +783,7 @@ if (isset($_POST['reset_password'])) {
             // ---------------------------------------------------------
             } elseif ($page == 'tambah') {
             ?>
-                <div class="card card-custom">
+                <div class="card card-custom card-static">
                     <div class="card-header bg-white border-bottom py-3 px-4">
                         <div class="d-flex align-items-center gap-3">
                             <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; background: var(--primary-light); color: var(--primary);">
@@ -1023,7 +1024,7 @@ if (isset($_POST['reset_password'])) {
             // ---------------------------------------------------------
             } elseif ($page == 'mahasiswa') {
             ?>
-                <div class="card card-custom overflow-hidden">
+                <div class="card card-custom card-static overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Data Mahasiswa Terdaftar</h6>
                         <div class="admin-toolbar">
@@ -1146,7 +1147,7 @@ if (isset($_POST['reset_password'])) {
             // ---------------------------------------------------------
             } elseif ($page == 'pemateri') {
             ?>
-                <div class="card card-custom overflow-hidden">
+                <div class="card card-custom card-static overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Data Pemateri Seminar</h6>
                         <div class="admin-toolbar">
@@ -1211,7 +1212,7 @@ if (isset($_POST['reset_password'])) {
                                         echo "<tr>
                                                 <td class='text-center text-muted'>{$no}</td>
                                                 <td class='text-center' style='width:95px;'>
-                                                    <img src='" . e($foto_path) . "' alt='Foto pemateri' class='rounded-1 border shadow-sm' width='85' height='85' style='object-fit:cover;'>
+                                                    <img src='" . e($foto_path) . "' alt='Foto pemateri' class='rounded-1 border shadow-sm' width='85' height='85' loading='lazy' decoding='async' style='object-fit:cover;'>
                                                 </td>
                                                 <td>
                                                     <span class='fw-semibold text-dark d-block'>" . e($pmt['nama']) . "</span>
@@ -1284,7 +1285,7 @@ if (isset($_POST['reset_password'])) {
             // ---------------------------------------------------------
             } elseif ($page == 'tambah_pemateri') {
             ?>
-                <div class="card card-custom">
+                <div class="card card-custom card-static">
                     <div class="card-header bg-white border-bottom py-3 px-4">
                         <div class="d-flex align-items-center gap-3">
                             <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; background: var(--primary-light); color: var(--primary);">
@@ -1364,7 +1365,7 @@ if (isset($_POST['reset_password'])) {
                 <div class="row g-4">
                     <div class="col-lg-4">
                         <div class="card card-custom text-center p-4 h-100">
-                            <img src="<?= e($foto_path) ?>" alt="Foto <?= htmlspecialchars($pmt['nama']) ?>" class="rounded-circle mx-auto mb-3 shadow-sm border" width="100" height="100" style="object-fit:cover;">
+                            <img src="<?= e($foto_path) ?>" alt="Foto <?= htmlspecialchars($pmt['nama']) ?>" class="rounded-circle mx-auto mb-3 shadow-sm border" width="100" height="100" loading="lazy" decoding="async" style="object-fit:cover;">
                             <h5 class="fw-bold text-dark mb-1"><?= htmlspecialchars($pmt['nama']) ?></h5>
                             <p class="text-primary small fw-semibold mb-3"><?= htmlspecialchars($pmt['keahlian']) ?></p>
                             
@@ -1401,7 +1402,7 @@ if (isset($_POST['reset_password'])) {
                             </div>
                         </div>
 
-                        <div class="card card-custom overflow-hidden">
+                        <div class="card card-custom card-static overflow-hidden">
                             <div class="card-header bg-white border-bottom py-3 px-4">
                                 <h6 class="fw-bold mb-0 text-dark">Daftar Seminar yang Dibawakan</h6>
                             </div>
@@ -1472,7 +1473,7 @@ if (isset($_POST['reset_password'])) {
                                 ? "uploads/profiles/" . $mhs['foto'] 
                                 : null;
                             if ($mhs_foto): ?>
-                                <img src="<?= e($mhs_foto) ?>" alt="Foto <?= htmlspecialchars($mhs['nama_lengkap']) ?>" class="rounded-circle shadow-sm border p-1 bg-white mb-3 mx-auto d-block" width="100" height="100" style="object-fit: cover;">
+                                <img src="<?= e($mhs_foto) ?>" alt="Foto <?= htmlspecialchars($mhs['nama_lengkap']) ?>" class="rounded-circle shadow-sm border p-1 bg-white mb-3 mx-auto d-block" width="100" height="100" loading="lazy" decoding="async" style="object-fit: cover;">
                             <?php else: ?>
                                 <div class="rounded-circle bg-primary-light text-primary d-flex align-items-center justify-content-center mb-3 shadow-sm border mx-auto" style="width: 100px; height: 100px; font-size: 2.5rem;">
                                     <i class="bi bi-person-fill"></i>
@@ -1582,7 +1583,7 @@ if (isset($_POST['reset_password'])) {
             // ---------------------------------------------------------
             } elseif ($page == 'laporan') {
             ?>
-                <div class="card card-custom overflow-hidden">
+                <div class="card card-custom card-static overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Laporan Presensi & Kehadiran Peserta</h6>
                         <div class="admin-toolbar">
@@ -1770,6 +1771,6 @@ if (isset($_POST['reset_password'])) {
         });
     });
 </script>
-<script src="theme.js" defer></script>
+<script src="theme.js?v=2.10" defer></script>
 </body>
 </html>

@@ -40,5 +40,34 @@ $check('theme_toggle_button pakai .theme-switch + knob', str_contains(theme_togg
 $check('theme_toggle_button punya ikon sun & moon', str_contains(theme_toggle_button(), 'bi-sun-fill') && str_contains(theme_toggle_button(), 'bi-moon-stars-fill'));
 $check('theme_toggle_button tak pakai btn-glass', !str_contains(theme_toggle_button(), 'btn-glass'));
 
+// parse_ini_bytes(): shorthand php.ini ke byte.
+$check('parse_ini_bytes("512M") = 536870912', parse_ini_bytes('512M') === 512 * 1024 * 1024);
+$check('parse_ini_bytes("2G") = 2147483648', parse_ini_bytes('2G') === 2 * 1024 * 1024 * 1024);
+$check('parse_ini_bytes("-1") = -1', parse_ini_bytes('-1') === -1);
+$check('parse_ini_bytes("128K") = 131072', parse_ini_bytes('128K') === 128 * 1024);
+
+// resize_image_file(): buat gambar 2752x1536, resize ke maks 1000 lebar.
+if (extension_loaded('gd') && function_exists('imagecreatefromjpeg')) {
+    $tmpSrc = sys_get_temp_dir() . '/academeet_test_src.jpg';
+    $tmpDst = sys_get_temp_dir() . '/academeet_test_dst.jpg';
+    $im = imagecreatetruecolor(2752, 1536);
+    imagefilledrectangle($im, 0, 0, 2752, 1536, imagecolorallocate($im, 40, 90, 200));
+    imagejpeg($im, $tmpSrc, 95);
+    imagedestroy($im);
+
+    $ok = resize_image_file($tmpSrc, $tmpDst, 1000, 0, 80);
+    $check('resize_image_file() berhasil', $ok === true);
+    if ($ok && is_file($tmpDst)) {
+        $dim = @getimagesize($tmpDst);
+        $check('resize_image_file() lebar <= 1000', $dim !== false && $dim[0] <= 1000);
+        $check('resize_image_file() aspek rasio terjaga', $dim !== false && abs(($dim[0] / $dim[1]) - (2752 / 1536)) < 0.02);
+        $check('resize_image_file() hasil lebih kecil', filesize($tmpDst) < filesize($tmpSrc));
+    }
+    @unlink($tmpSrc);
+    @unlink($tmpDst);
+} else {
+    echo "skip: resize_image_file() (ekstensi GD tidak tersedia)\n";
+}
+
 echo $failed === 0 ? "\nSemua tes lulus.\n" : "\n{$failed} tes gagal.\n";
 exit($failed === 0 ? 0 : 1);

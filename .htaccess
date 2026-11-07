@@ -5,3 +5,34 @@ Options -Indexes
 <FilesMatch "(^\.env|\.(sql|md|bak|log|ini|env|yml|yaml)$)">
     Require all denied
 </FilesMatch>
+
+# Kompresi (mod_deflate).
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml
+    AddOutputFilterByType DEFLATE application/javascript application/json
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# Cache (mod_expires): aset statis lama, PHP jangan di-cache.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 day"
+    ExpiresByType application/javascript "access plus 1 day"
+    ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
+
+# Cache-Control eksplisit (mod_headers).
+<IfModule mod_headers.c>
+    # Upload (nama acak, aman di-cache selamanya) + font.
+    <FilesMatch "\.(jpg|jpeg|png|webp|gif|ico|woff2?|ttf|eot)$">
+        Header set Cache-Control "public, max-age=2592000, immutable"
+    </FilesMatch>
+    # style.css & theme.js: versi lewat ?v=.
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=86400"
+    </FilesMatch>
+    # Halaman PHP: jangan di-cache.
+    <FilesMatch "\.php$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+    </FilesMatch>
+</IfModule>

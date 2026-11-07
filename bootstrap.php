@@ -167,6 +167,119 @@ function pdf_text(string $value): string
 }
 
 /**
+ * Ubah shorthand ukuran php.ini (mis. "512M", "2G", "-1") ke byte.
+ * Mengembalikan nilai <= 0 bila tak terbatas.
+ */
+function parse_ini_bytes(string $value): int
+{
+    $value = trim($value);
+    if ($value === '' || $value === '-1') {
+        return -1;
+    }
+    $unit = strtoupper(substr($value, -1));
+    $num = (int) $value;
+    return match ($unit) {
+        'G'     => $num * 1024 * 1024 * 1024,
+        'M'     => $num * 1024 * 1024,
+        'K'     => $num * 1024,
+        default => $num,
+    };
+}
+
+/**
+ * Batas dimensi maks per subdir upload. Sisi terpanjang (kecuali poster: lebar).
+ * Mengembalikan [maxWidth, maxHeight]; 0 berarti tidak dibatasi di sisi itu.
+ */
+function upload_max_dimensions(string $subdir): array
+{
+    return [
+        'posters'  => [1000, 0],   // poster: maks lebar 1000px
+        'profiles' => [400, 400],  // profil: sisi terpanjang 400px
+        'pemateri' => [600, 600],  // pemateri: sisi terpanjang 600px
+    ][$subdir] ?? [0, 0];
+}
+
+/**
+ * Resize + re-encode gambar dengan GD. Tidak upscale, aspek rasio dijaga.
+ * Ekstensi output mengikuti format sumber (jpg/png/webp). JPEG: quality + progressive.
+ * Mengembalikan true jika berhasil menulis $dst, false jika GD/format tak didukung.
+ */
+function resize_image_file(string $src, string $dst, int $maxWidth, int $maxHeight, int $quality = 80): bool
+{
+    if (!extension_loaded('gd') || !function_exists('imagecreatefromjpeg')) {
+        return false;
+    }
+    $info = @getimagesize($src);
+    if (!$info) {
+        return false;
+    }
+    [$w, $h] = $info;
+    $type = $info[2];
+    if ($type === IMAGETYPE_JPEG) {
+        $im = @imagecreatefromjpeg($src);
+    } elseif ($type === IMAGETYPE_PNG) {
+        $im = @imagecreatefrompng($src);
+    } elseif ($type === IMAGETYPE_WEBP && function_exists('imagecreatefromwebp')) {
+        $im = @imagecreatefromwebp($src);
+    } else {
+        return false;
+    }
+    if (!$im) {
+        return false;
+    }
+
+    // Koreksi orientasi EXIF (JPEG) karena resize membuang metadata EXIF.
+    if ($type === IMAGETYPE_JPEG && function_exists('exif_read_data')) {
+        $exif = @exif_read_data($src);
+        $orient = is_array($exif) ? ($exif['Orientation'] ?? 0) : 0;
+        $deg = ['3' => 180, '6' => -90, '8' => 90][(string) $orient] ?? null;
+        if ($deg !== null) {
+            $rotated = imagerotate($im, $deg, 0);
+            if ($rotated !== false) {
+                imagedestroy($im);
+                $im = $rotated;
+            }
+        }
+    }
+
+    $w = imagesx($im);
+    $h = imagesy($im);
+
+    // Hitung skala, jangan upscale.
+    $scale = 1.0;
+    if ($maxWidth > 0 && $w > $maxWidth) {
+        $scale = min($scale, $maxWidth / $w);
+    }
+    if ($maxHeight > 0 && $h > $maxHeight) {
+        $scale = min($scale, $maxHeight / $h);
+    }
+    $nw = max(1, (int) round($w * $scale));
+    $nh = max(1, (int) round($h * $scale));
+
+    $out = ($scale < 1.0) ? imagescale($im, $nw, $nh, IMG_BICUBIC) : $im;
+    if (!$out) {
+        imagedestroy($im);
+        return false;
+    }
+
+    if ($type === IMAGETYPE_PNG) {
+        imagesavealpha($out, true);
+        $ok = imagepng($out, $dst, 8);
+    } elseif ($type === IMAGETYPE_WEBP && function_exists('imagewebp')) {
+        $ok = imagewebp($out, $dst, $quality);
+    } else {
+        imageinterlace($out, true); // progressive JPEG
+        $ok = imagejpeg($out, $dst, $quality);
+    }
+
+    if ($out !== $im) {
+        imagedestroy($out);
+    }
+    imagedestroy($im);
+    return (bool) $ok;
+}
+
+/**
  * Validasi upload gambar berdasarkan isi file (bukan ekstensi).
  * Mengembalikan nama file baru, atau null jika tidak ada file.
  */
@@ -191,15 +304,52 @@ function upload_image(array $file, string $subdir, int $maxBytes): ?string
         throw new RuntimeException('File harus berupa gambar JPG, PNG, atau WebP.');
     }
 
+    // Tolak gambar absurd sebelum decode agar server tak kehabisan memori.
+    $w = (int) $info[0];
+    $h = (int) $info[1];
+    $limit = 10000;
+    $memLimit = parse_ini_bytes((string) ini_get('memory_limit')); // byte; <=0 berarti tak terbatas
+    $estMem = $w * $h * 5;
+    if ($w > $limit || $h > $limit || ($memLimit > 0 && $estMem > $memLimit * 0.6)) {
+        throw new RuntimeException('Dimensi gambar terlalu besar untuk diproses. Mohon unggah gambar yang lebih kecil.');
+    }
+
     $prefix = ['posters' => 'poster_', 'pemateri' => 'pemateri_', 'profiles' => 'profile_'][$subdir] ?? 'img_';
     $name = $prefix . bin2hex(random_bytes(8)) . '.' . $allowed[$info[2]];
     $dir = __DIR__ . '/uploads/' . $subdir;
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
         throw new RuntimeException('Folder upload tidak tersedia.');
     }
-    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) {
+
+    // Resize + re-encode di temp; kalau gagal, simpan file asli (jangan gagalkan upload).
+    $source = $file['tmp_name'];
+    $isResized = false;
+    $tmpResized = $file['tmp_name'] . '.opt.' . $allowed[$info[2]];
+    [$maxW, $maxH] = upload_max_dimensions($subdir);
+    if (($maxW > 0 || $maxH > 0) && resize_image_file($source, $tmpResized, $maxW, $maxH, 80)) {
+        if (@filesize($tmpResized) > 0 && @filesize($tmpResized) < @filesize($source)) {
+            $source = $tmpResized;
+            $isResized = true;
+        } else {
+            @unlink($tmpResized);
+        }
+    } elseif (is_file($tmpResized)) {
+        @unlink($tmpResized);
+    }
+
+    $dest = $dir . '/' . $name;
+    if ($isResized) {
+        // rename cepat bila satu filesystem; fallback copy untuk tmp berbeda mount.
+        $moved = @rename($source, $dest) || (@copy($source, $dest) && @unlink($source));
+    } else {
+        $moved = move_uploaded_file($source, $dest);
+    }
+    if (!$moved) {
+        @unlink($dest); // buang hasil parsial bila copy gagal di tengah
+        @unlink($tmpResized);
         throw new RuntimeException('Gagal menyimpan gambar.');
     }
+    @unlink($tmpResized);
     return $name;
 }
 

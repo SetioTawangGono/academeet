@@ -213,10 +213,11 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e(ucfirst($page)) ?> - AcadeMeet</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.9">
+    <link rel="stylesheet" href="style.css?v=2.10">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -266,7 +267,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                       <span class="d-block small text-muted" style="line-height: 1;">Halo,</span>
                       <span class="fw-bold text-dark small"><?= e($user['nama_lengkap']) ?></span>
                   </div>
-                  <img src="<?= e($avatar_url) ?>" class="rounded-circle border" width="34" height="34" style="object-fit: cover;" alt="Avatar <?= e($user['nama_lengkap']) ?>">
+                  <img src="<?= e($avatar_url) ?>" class="rounded-circle border" width="34" height="34" decoding="async" style="object-fit: cover;" alt="Avatar <?= e($user['nama_lengkap']) ?>">
               </div>
               <div class="d-none d-lg-flex align-items-center">
                   <?= theme_toggle_button() ?>
@@ -291,7 +292,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             <div class="col-lg-4">
                 <div class="card card-custom text-center p-4 h-100">
                     <div class="position-relative d-inline-block mx-auto mb-3">
-                        <img src="<?= e($avatar_url) ?>" class="rounded-circle shadow-sm border p-1 bg-white" width="120" height="120" style="object-fit: cover;" alt="Avatar <?= e($user['nama_lengkap']) ?>">
+                        <img src="<?= e($avatar_url) ?>" class="rounded-circle shadow-sm border p-1 bg-white" width="120" height="120" loading="lazy" decoding="async" style="object-fit: cover;" alt="Avatar <?= e($user['nama_lengkap']) ?>">
                         <span class="position-absolute bottom-0 end-0 bg-success border border-white border-2 rounded-circle p-2" title="Online"></span>
                     </div>
                     <h1 class="h5 fw-bold text-dark mb-1"><?= e($user['nama_lengkap']) ?></h1>
@@ -330,7 +331,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             </div>
 
             <div class="col-lg-8">
-                <div class="card card-custom h-100">
+                <div class="card card-custom card-static h-100">
                     <div class="card-header bg-white border-bottom py-3 px-4">
                         <h2 class="fw-bold mb-0 text-dark"><i class="bi bi-gear-fill text-primary me-2"></i>Pengaturan Profil</h2>
                     </div>
@@ -386,7 +387,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             </div>
 
             <div class="col-12">
-                <div class="card card-custom">
+                <div class="card card-custom card-static">
                     <div class="card-header bg-white border-bottom py-3 px-4">
                         <h2 class="fw-bold mb-0 text-dark"><i class="bi bi-key-fill text-primary me-2"></i>Ubah Password</h2>
                     </div>
@@ -577,7 +578,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             <div class="row g-4">
                 <div class="col-lg-4">
                     <div class="card card-custom text-center p-4 h-100">
-                        <img src="<?= e($foto_pem) ?>" alt="Foto <?= e($pmt['nama']) ?>" class="rounded-circle mx-auto mb-3 shadow-sm border" width="100" height="100" style="object-fit:cover;">
+                        <img src="<?= e($foto_pem) ?>" alt="Foto <?= e($pmt['nama']) ?>" class="rounded-circle mx-auto mb-3 shadow-sm border" width="100" height="100" loading="lazy" decoding="async" style="object-fit:cover;">
                         <h1 class="h5 fw-bold text-dark mb-1"><?= e($pmt['nama']) ?></h1>
                         <p class="text-primary small fw-semibold mb-3"><?= e($pmt['keahlian']) ?></p>
                         <div class="p-3 bg-light rounded-3 border text-start">
@@ -600,7 +601,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             <p class="text-secondary mb-0" style="white-space: pre-line; line-height: 1.7;"><?= !empty($pmt['bio']) ? e($pmt['bio']) : '<span class="text-muted fst-italic">Belum ada biografi untuk pemateri ini.</span>' ?></p>
                         </div>
                     </div>
-                    <div class="card card-custom overflow-hidden">
+                    <div class="card card-custom card-static overflow-hidden">
                         <div class="card-header bg-white border-bottom py-3 px-4">
                             <h2 class="h6 fw-bold mb-0 text-dark"><i class="bi bi-calendar-event text-primary me-2"></i>Seminar yang Dibawakan</h2>
                         </div>
@@ -709,10 +710,10 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                     $sudah_daftar = (int) $row['sudah_daftar'] === 1;
             ?>
             <div class="col-md-6 col-lg-4">
-                <div class="card card-custom h-100 overflow-hidden d-flex flex-column border-0 shadow-sm">
+                <div class="card card-custom seminar-card h-100 overflow-hidden d-flex flex-column border-0 shadow-sm">
                     <div class="position-relative">
                         <?php if (!empty($row['poster'])): ?>
-                            <img src="<?= e('uploads/posters/' . $row['poster']) ?>" class="card-img-top" width="400" height="200" loading="lazy" alt="Poster seminar <?= e($row['judul']) ?>" style="height: 200px; object-fit: cover;">
+                            <img src="<?= e('uploads/posters/' . $row['poster']) ?>" class="card-img-top" width="400" height="200" loading="lazy" decoding="async" alt="Poster seminar <?= e($row['judul']) ?>" style="height: 200px; object-fit: cover;">
                         <?php else: ?>
                             <div class="bg-light text-primary d-flex flex-column align-items-center justify-content-center" style="height: 200px; border-bottom: 1px solid var(--border-color);">
                                 <i class="bi bi-image fs-1 opacity-50" aria-hidden="true"></i>
@@ -872,6 +873,6 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             tombol.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Memproses...';
         });
     });
-</script><script src="theme.js" defer></script>
+</script><script src="theme.js?v=2.10" defer></script>
 </body>
 </html>
