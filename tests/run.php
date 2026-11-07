@@ -145,5 +145,114 @@ if (extension_loaded('gd') && function_exists('imagecreatefromjpeg')) {
     echo "skip: resize_image_file() (ekstensi GD tidak tersedia)\n";
 }
 
+// 1. kategori_seminar()
+$kats = kategori_seminar();
+$check('kategori_seminar() memuat 6 nilai', count($kats) === 6 && $kats === ['Teknologi', 'Karier', 'Riset', 'Soft Skill', 'Kewirausahaan', 'Umum']);
+[$errKat, $dataKat] = validasi_detail_seminar(['kategori' => 'Luar Daftar']);
+$check('kategori di luar daftar ditolak', $errKat !== '');
+
+// 2. validasi_detail_seminar()
+[$errJam1] = validasi_detail_seminar(['jam_mulai' => '9:00']);
+$check('validasi_detail_seminar jam_mulai 9:00 ditolak', $errJam1 !== '');
+[$errJam2] = validasi_detail_seminar(['jam_mulai' => '25:00']);
+$check('validasi_detail_seminar jam_mulai 25:00 ditolak', $errJam2 !== '');
+[$errJamS1] = validasi_detail_seminar(['jam_selesai' => '10:00']);
+$check('validasi_detail_seminar jam_selesai tanpa jam_mulai ditolak', $errJamS1 !== '');
+[$errJamS2] = validasi_detail_seminar(['jam_mulai' => '08:00', 'jam_selesai' => '08:00']);
+$check('validasi_detail_seminar jam_selesai == jam_mulai ditolak', $errJamS2 !== '');
+[$errJamS3] = validasi_detail_seminar(['jam_mulai' => '10:00', 'jam_selesai' => '08:00']);
+$check('validasi_detail_seminar jam_selesai < jam_mulai ditolak', $errJamS3 !== '');
+[$errJamOk, $dataJamOk] = validasi_detail_seminar(['jam_mulai' => '08:00', 'jam_selesai' => '10:00']);
+$check('validasi_detail_seminar 08:00+10:00 diterima', $errJamOk === '' && $dataJamOk['jam_mulai'] === '08:00:00' && $dataJamOk['jam_selesai'] === '10:00:00');
+[$errLok] = validasi_detail_seminar(['lokasi' => str_repeat('a', 151)]);
+$check('validasi_detail_seminar lokasi 151 karakter ditolak', $errLok !== '');
+[$errDesk1] = validasi_detail_seminar(['deskripsi' => str_repeat('a', 2001)]);
+$check('validasi_detail_seminar deskripsi 2001 karakter ditolak', $errDesk1 !== '');
+[$errDesk2] = validasi_detail_seminar(['deskripsi' => str_repeat('🚀', 1500)]);
+$check('validasi_detail_seminar deskripsi emoji 1500 karakter diterima', $errDesk2 === '');
+
+// 3. validasi_link_online()
+$check('validasi_link_online javascript ditolak', validasi_link_online('javascript:alert(1)') === false);
+$check('validasi_link_online data uri ditolak', validasi_link_online('data:text/html,x') === false);
+$check('validasi_link_online ftp ditolak', validasi_link_online('ftp://x.com') === false);
+$check('validasi_link_online tanpa host ditolak', validasi_link_online('http:///tanpa-host') === false);
+$check('validasi_link_online userinfo ditolak', validasi_link_online('http://user:pass@host.com') === false);
+$check('validasi_link_online spasi ditolak', validasi_link_online('http://host.com/spasi ada') === false);
+$check('validasi_link_online newline ditolak', validasi_link_online("http://x.com\n") === false);
+$check('validasi_link_online https valid diterima', validasi_link_online('https://example.com/x?y=1') === true);
+$check('validasi_link_online http local diterima', validasi_link_online('http://host.local') === true);
+
+// 4. like_escape()
+$check('like_escape 50%_a\\b', like_escape('50%_a\b') === '50\%\_a\\\\b');
+$check('like_escape biasa', like_escape('biasa') === 'biasa');
+
+// 5. normalisasi_filter_katalog()
+$f1 = normalisasi_filter_katalog(['kat' => 'NonExist', 'p' => 'abc', 'sedia' => 'invalid']);
+$check('normalisasi_filter_katalog invalid ke default', $f1['kat'] === '' && $f1['p'] === 1 && $f1['sedia'] === 'semua');
+$f2 = normalisasi_filter_katalog(['dari' => '2026-13-40', 'sampai' => 'bukan-tanggal']);
+$check('normalisasi_filter_katalog tanggal invalid ke empty', $f2['dari'] === '' && $f2['sampai'] === '');
+$f3 = normalisasi_filter_katalog(['dari' => '2026-12-01', 'sampai' => '2026-11-01']);
+$check('normalisasi_filter_katalog dari > sampai ditukar', $f3['dari'] === '2026-11-01' && $f3['sampai'] === '2026-12-01');
+$f4 = normalisasi_filter_katalog(['q' => '  tes  ', 'kat' => 'Teknologi', 'dari' => '2026-11-01', 'sampai' => '2026-11-10', 'sedia' => 'tersedia', 'p' => '2']);
+$check('normalisasi_filter_katalog kombinasi valid', $f4['q'] === 'tes' && $f4['kat'] === 'Teknologi' && $f4['dari'] === '2026-11-01' && $f4['sampai'] === '2026-11-10' && $f4['sedia'] === 'tersedia' && $f4['p'] === 2);
+
+// 6. ICS helpers & buat_ics()
+$acaraTes = [
+    'id_registrasi' => 123,
+    'judul' => 'A, B; C',
+    'pemateri' => 'Dr. Alpha',
+    'kategori' => 'Teknologi',
+    'deskripsi' => 'Deskripsi singkat',
+    'lokasi' => 'Ruang 101',
+    'link_online' => 'https://example.com/zoom',
+    'tanggal' => '2026-11-15',
+    'jam_mulai' => '08:00:00',
+    'jam_selesai' => null,
+];
+$ics1 = buat_ics($acaraTes, '2026-11-08 10:00:00');
+$check('ICS semua baris diakhiri CRLF', (bool) preg_match('/^([^\r\n]*\r\n)+$/s', $ics1) && !str_contains(str_replace("\r\n", '', $ics1), "\n"));
+$check('ICS escape koma/titik-koma', str_contains($ics1, 'SUMMARY:A\, B\; C'));
+
+$acaraPanjang = [
+    'id_registrasi' => 456,
+    'judul' => 'Judul Seminar Sangat Panjang Sekali Dengan Huruf UTF-8 🔥 Berisi Emoji Dan Karakter Multibyte Yang Melebihi Batas 75 Oktet Per Baris Fisik',
+    'tanggal' => '2026-11-20',
+];
+$icsPanjang = buat_ics($acaraPanjang, '2026-11-08 10:00:00');
+$barisFisik = explode("\r\n", rtrim($icsPanjang, "\r\n"));
+$pelipatanOk = true;
+foreach ($barisFisik as $b) {
+    if (strlen($b) > 75) {
+        $pelipatanOk = false;
+        break;
+    }
+}
+$check('ICS pelipatan 75 oktet per baris fisik', $pelipatanOk);
+
+$check('ICS acara berjam start/end/vtimezone/valarm', str_contains($ics1, 'DTSTART;TZID=Asia/Jakarta:20261115T080000') && str_contains($ics1, 'DTEND;TZID=Asia/Jakarta:20261115T100000') && str_contains($ics1, 'BEGIN:VTIMEZONE') && str_contains($ics1, 'BEGIN:VALARM'));
+
+$acaraDenganSelesai = $acaraTes;
+$acaraDenganSelesai['jam_selesai'] = '09:30:00';
+$icsSelesai = buat_ics($acaraDenganSelesai, '2026-11-08 10:00:00');
+$check('ICS acara berjam dengan jam_selesai 09:30:00', str_contains($icsSelesai, 'DTEND;TZID=Asia/Jakarta:20261115T093000'));
+
+$acaraSeharian = [
+    'id_registrasi' => 789,
+    'judul' => 'Workshop Seharian',
+    'tanggal' => '2026-11-25',
+    'jam_mulai' => null,
+];
+$icsSeharian = buat_ics($acaraSeharian, '2026-11-08 10:00:00');
+$check('ICS acara seharian DATE format tanpa timezone & alarm', str_contains($icsSeharian, 'DTSTART;VALUE=DATE:20261125') && str_contains($icsSeharian, 'DTEND;VALUE=DATE:20261126') && !str_contains($icsSeharian, 'BEGIN:VTIMEZONE') && !str_contains($icsSeharian, 'BEGIN:VALARM'));
+
+$acaraKodeTiket = $acaraTes;
+$acaraKodeTiket['kode_tiket'] = 'ACD-123456';
+$icsKode = buat_ics($acaraKodeTiket, '2026-11-08 10:00:00');
+$check('ICS tidak memuat kode tiket', !str_contains($icsKode, 'ACD-123456'));
+
+$icsUid1 = buat_ics($acaraTes, '2026-11-08 10:00:00');
+$icsUid2 = buat_ics($acaraTes, '2026-11-08 10:00:00');
+$check('ICS UID stabil', str_contains($icsUid1, 'UID:registrasi-123@academeet') && $icsUid1 === $icsUid2);
+
 echo $failed === 0 ? "\nSemua tes lulus.\n" : "\n{$failed} tes gagal.\n";
 exit($failed === 0 ? 0 : 1);

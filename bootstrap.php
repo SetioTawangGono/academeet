@@ -624,3 +624,390 @@ function theme_toggle_button(string $extraClass = ''): string
         . '</span>'
         . '</button>';
 }
+
+/** Daftar kategori seminar resmi. */
+function kategori_seminar(): array
+{
+    return ['Teknologi', 'Karier', 'Riset', 'Soft Skill', 'Kewirausahaan', 'Umum'];
+}
+
+/** Validasi URL online (murni, tanpa DB). */
+function validasi_link_online(string $url): bool
+{
+    if ($url === '') {
+        return false;
+    }
+    // Tolak karakter kontrol (termasuk newline/tab/spasi)
+    if (preg_match('/[\x00-\x20\x7F]/', $url)) {
+        return false;
+    }
+    // Parse URL
+    $parts = parse_url($url);
+    if ($parts === false) {
+        return false;
+    }
+    // Skema harus http atau https (case-insensitive)
+    $scheme = $parts['scheme'] ?? '';
+    if (!in_array(strtolower($scheme), ['http', 'https'], true)) {
+        return false;
+    }
+    // Harus ada host non-kosong
+    $host = $parts['host'] ?? '';
+    if ($host === '') {
+        return false;
+    }
+    // Tolak userinfo (user:pass@ atau user@)
+    if (isset($parts['user']) || isset($parts['pass'])) {
+        return false;
+    }
+    return true;
+}
+
+/** Validasi detail seminar (murni, tanpa DB). */
+function validasi_detail_seminar(array $in): array
+{
+    $error = '';
+    $data = [
+        'jam_mulai' => null,
+        'jam_selesai' => null,
+        'lokasi' => null,
+        'link_online' => null,
+        'deskripsi' => null,
+        'kategori' => '',
+    ];
+
+    // 1. Cek kategori (dulu agar error pertama kalau salah)
+    if (!array_key_exists('kategori', $in)) {
+        $data['kategori'] = 'Umum';
+    } else {
+        $kat = is_string($in['kategori']) ? trim($in['kategori']) : '';
+        if ($kat === '' || !in_array($kat, kategori_seminar(), true)) {
+            $error = 'Kategori tidak dikenali.';
+            return [$error, $data];
+        }
+        $data['kategori'] = $kat;
+    }
+
+    // 2. Jam mulai
+    if (isset($in['jam_mulai']) && $in['jam_mulai'] !== '' && $in['jam_mulai'] !== null) {
+        $jm = is_string($in['jam_mulai']) ? trim($in['jam_mulai']) : '';
+        if ($jm === '') {
+            $data['jam_mulai'] = null;
+        } elseif (preg_match('/^(\d{2}):(\d{2})$/', $jm, $m)) {
+            $hh = (int) $m[1];
+            $mm = (int) $m[2];
+            if ($hh < 0 || $hh > 23 || $mm < 0 || $mm > 59) {
+                $error = 'Jam mulai tidak valid.';
+                return [$error, $data];
+            }
+            $data['jam_mulai'] = sprintf('%02d:%02d:00', $hh, $mm);
+        } else {
+            $error = 'Jam mulai tidak valid.';
+            return [$error, $data];
+        }
+    }
+
+    // 3. Jam selesai
+    if (isset($in['jam_selesai']) && $in['jam_selesai'] !== '' && $in['jam_selesai'] !== null) {
+        $js = is_string($in['jam_selesai']) ? trim($in['jam_selesai']) : '';
+        if ($js === '') {
+            $data['jam_selesai'] = null;
+        } else {
+            if ($data['jam_mulai'] === null) {
+                $error = 'Jam selesai diisi tetapi jam mulai kosong.';
+                return [$error, $data];
+            }
+            if (preg_match('/^(\d{2}):(\d{2})$/', $js, $m)) {
+                $hh = (int) $m[1];
+                $mm = (int) $m[2];
+                if ($hh < 0 || $hh > 23 || $mm < 0 || $mm > 59) {
+                    $error = 'Jam selesai tidak valid.';
+                    return [$error, $data];
+                }
+                $jamSelesaiStr = sprintf('%02d:%02d:00', $hh, $mm);
+                if ($jamSelesaiStr <= $data['jam_mulai']) {
+                    $error = 'Jam selesai harus lebih besar dari jam mulai.';
+                    return [$error, $data];
+                }
+                $data['jam_selesai'] = $jamSelesaiStr;
+            } else {
+                $error = 'Jam selesai tidak valid.';
+                return [$error, $data];
+            }
+        }
+    }
+
+    // 4. Lokasi
+    if (isset($in['lokasi']) && $in['lokasi'] !== '' && $in['lokasi'] !== null) {
+        $lok = is_string($in['lokasi']) ? trim($in['lokasi']) : '';
+        if ($lok === '') {
+            $data['lokasi'] = null;
+        } elseif (str_len($lok) > 150) {
+            $error = 'Lokasi maksimal 150 karakter.';
+            return [$error, $data];
+        } else {
+            $data['lokasi'] = $lok;
+        }
+    }
+
+    // 5. Link online
+    if (isset($in['link_online']) && $in['link_online'] !== '' && $in['link_online'] !== null) {
+        $lo = is_string($in['link_online']) ? trim($in['link_online']) : '';
+        if ($lo === '') {
+            $data['link_online'] = null;
+        } elseif (str_len($lo) > 255) {
+            $error = 'Link online maksimal 255 karakter.';
+            return [$error, $data];
+        } elseif (!validasi_link_online($lo)) {
+            $error = 'Link online tidak valid.';
+            return [$error, $data];
+        } else {
+            $data['link_online'] = $lo;
+        }
+    }
+
+    // 6. Deskripsi
+    if (isset($in['deskripsi']) && $in['deskripsi'] !== '' && $in['deskripsi'] !== null) {
+        $desk = is_string($in['deskripsi']) ? trim($in['deskripsi']) : '';
+        if ($desk === '') {
+            $data['deskripsi'] = null;
+        } elseif (str_len($desk) > 2000) {
+            $error = 'Deskripsi maksimal 2000 karakter.';
+            return [$error, $data];
+        } else {
+            $data['deskripsi'] = $desk;
+        }
+    }
+
+    return [$error, $data];
+}
+
+/** Escape string untuk LIKE (RFC pattern ESCAPE '\\'). */
+function like_escape(string $s): string
+{
+    return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $s);
+}
+
+/** Normalisasi filter katalog (murni, tanpa DB). */
+function normalisasi_filter_katalog(array $get): array
+{
+    $q = '';
+    if (isset($get['q']) && is_string($get['q'])) {
+        $q = trim($get['q']);
+    }
+
+    $kat = '';
+    if (isset($get['kat']) && is_string($get['kat'])) {
+        $kat = trim($get['kat']);
+        if ($kat === '' || !in_array($kat, kategori_seminar(), true)) {
+            $kat = '';
+        }
+    }
+
+    $dari = '';
+    if (isset($get['dari']) && is_string($get['dari'])) {
+        $d = trim($get['dari']);
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+            $parts = explode('-', $d);
+            $y = (int) $parts[0];
+            $m = (int) $parts[1];
+            $d_val = (int) $parts[2];
+            if (checkdate($m, $d_val, $y)) {
+                $dari = $d;
+            }
+        }
+    }
+
+    $sampai = '';
+    if (isset($get['sampai']) && is_string($get['sampai'])) {
+        $s = trim($get['sampai']);
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) {
+            $parts = explode('-', $s);
+            $y = (int) $parts[0];
+            $m = (int) $parts[1];
+            $d_val = (int) $parts[2];
+            if (checkdate($m, $d_val, $y)) {
+                $sampai = $s;
+            }
+        }
+    }
+
+    // Jika keduanya terisi dan dari > sampai, tukar
+    if ($dari !== '' && $sampai !== '' && $dari > $sampai) {
+        $tmp = $dari;
+        $dari = $sampai;
+        $sampai = $tmp;
+    }
+
+    $sedia = 'semua';
+    if (isset($get['sedia'])) {
+        $s = strtolower(trim((string) $get['sedia']));
+        if (in_array($s, ['semua', 'tersedia', 'penuh'], true)) {
+            $sedia = $s;
+        }
+    }
+
+    $p = 1;
+    if (isset($get['p'])) {
+        $val = $get['p'];
+        if (is_int($val) && $val >= 1) {
+            $p = $val;
+        } elseif (is_numeric($val)) {
+            $num = (int) $val;
+            if ($num >= 1) {
+                $p = $num;
+            }
+        }
+    }
+
+    return [
+        'q' => $q,
+        'kat' => $kat,
+        'dari' => $dari,
+        'sampai' => $sampai,
+        'sedia' => $sedia,
+        'p' => $p,
+    ];
+}
+
+/** Escape string untuk ICS (RFC 5545). */
+function ics_escape(string $s): string
+{
+    return str_replace(['\\', ';', ',', "\r\n", "\n", "\r"], ['\\\\', '\;', '\,', '\n', '\n', '\n'], $s);
+}
+
+/** Lipat baris ICS pada 75 oktet tanpa memotong UTF-8. */
+function ics_lipat_baris(string $baris): string
+{
+    $len = strlen($baris);
+    if ($len <= 75) {
+        return $baris;
+    }
+    $result = '';
+    $pos = 0;
+    while ($pos < $len) {
+        $max = ($pos === 0) ? 75 : 74;
+        $chunkLen = min($max, $len - $pos);
+        if ($pos + $chunkLen < $len) {
+            while ($chunkLen > 0 && (ord($baris[$pos + $chunkLen]) & 0xC0) === 0x80) {
+                $chunkLen--;
+            }
+        }
+        if ($pos > 0) {
+            $result .= "\r\n ";
+        }
+        $result .= substr($baris, $pos, $chunkLen);
+        $pos += $chunkLen;
+    }
+    return $result;
+}
+
+/** Slug nama file ICS (ASCII, lowercase, ganti non-[a-z0-9] dengan -). */
+function slug_nama_file(string $s): string
+{
+    $s = trim($s);
+    if (function_exists('iconv')) {
+        $trans = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s);
+        if ($trans !== false) {
+            $s = $trans;
+        }
+    }
+    $s = strtolower($s);
+    $s = preg_replace('/[^a-z0-9]+/', '-', $s);
+    $s = trim($s, '-');
+    if (strlen($s) > 60) {
+        $s = substr($s, 0, 60);
+        $s = rtrim($s, '-');
+    }
+    return $s === '' ? 'seminar' : $s;
+}
+
+/** Buat file ICS RFC 5545 (murni, tanpa DB). */
+function buat_ics(array $acara, string $sekarangUtc): string
+{
+    $dtstamp = '';
+    if ($sekarangUtc !== '' && preg_match('/^\d{8}T\d{6}Z$/', $sekarangUtc)) {
+        $dtstamp = $sekarangUtc;
+    } elseif ($sekarangUtc !== '') {
+        $ts = strtotime($sekarangUtc . ' UTC');
+        $dtstamp = $ts !== false ? gmdate('Ymd\THis\Z', $ts) : gmdate('Ymd\THis\Z');
+    } else {
+        $dtstamp = gmdate('Ymd\THis\Z');
+    }
+
+    $id = (string) ($acara['id_registrasi'] ?? $acara['id'] ?? '0');
+    $judul = (string) ($acara['judul'] ?? '');
+    $pemateri = (string) ($acara['pemateri'] ?? '');
+    $kategori = (string) ($acara['kategori'] ?? '');
+    $deskripsi = (string) ($acara['deskripsi'] ?? '');
+    $lokasi = (string) ($acara['lokasi'] ?? '');
+    $link_online = (string) ($acara['link_online'] ?? '');
+    $tanggal = (string) ($acara['tanggal'] ?? '');
+    $jamMulai = $acara['jam_mulai'] ?? null;
+    $jamSelesai = $acara['jam_selesai'] ?? null;
+
+    $descParts = [];
+    if ($pemateri !== '') $descParts[] = 'Pemateri: ' . $pemateri;
+    if ($kategori !== '') $descParts[] = 'Kategori: ' . $kategori;
+    if ($deskripsi !== '') $descParts[] = $deskripsi;
+    if ($link_online !== '') $descParts[] = 'Link: ' . $link_online;
+    $desc = implode("\n\n", $descParts);
+
+    $loc = '';
+    if ($lokasi !== '') $loc = $lokasi;
+    elseif ($link_online !== '') $loc = 'Online';
+
+    $lines = [];
+    $lines[] = 'BEGIN:VCALENDAR';
+    $lines[] = 'VERSION:2.0';
+    $lines[] = 'PRODID:-//AcadeMeet//Seminar//ID';
+    $lines[] = 'CALSCALE:GREGORIAN';
+    $lines[] = 'METHOD:PUBLISH';
+
+    $hasJam = ($jamMulai !== null && $jamMulai !== '' && preg_match('/^\d{2}:\d{2}/', $jamMulai));
+    if ($hasJam) {
+        $lines[] = 'BEGIN:VTIMEZONE';
+        $lines[] = 'TZID:Asia/Jakarta';
+        $lines[] = 'BEGIN:STANDARD';
+        $lines[] = 'DTSTART:19700101T000000';
+        $lines[] = 'TZOFFSETFROM:+0700';
+        $lines[] = 'TZOFFSETTO:+0700';
+        $lines[] = 'TZNAME:WIB';
+        $lines[] = 'END:STANDARD';
+        $lines[] = 'END:VTIMEZONE';
+    }
+
+    $lines[] = 'BEGIN:VEVENT';
+    $lines[] = 'UID:registrasi-' . $id . '@academeet';
+    $lines[] = 'DTSTAMP:' . $dtstamp;
+    $lines[] = ics_lipat_baris('SUMMARY:' . ics_escape($judul));
+    $lines[] = ics_lipat_baris('LOCATION:' . ics_escape($loc));
+    $lines[] = ics_lipat_baris('DESCRIPTION:' . ics_escape($desc));
+
+    $tglComp = str_replace('-', '', $tanggal);
+    if ($hasJam) {
+        $jm = preg_match('/^(\d{2}):(\d{2})/', $jamMulai, $m) ? sprintf('%02d%02d00', $m[1], $m[2]) : '000000';
+        $lines[] = 'DTSTART;TZID=Asia/Jakarta:' . $tglComp . 'T' . $jm;
+
+        if ($jamSelesai && preg_match('/^(\d{2}):(\d{2})/', $jamSelesai, $m)) {
+            $js = sprintf('%02d%02d00', $m[1], $m[2]);
+        } else {
+            $h = (int) substr($jm, 0, 2) + 2;
+            $js = ($h >= 24) ? '235959' : sprintf('%02d%s', $h, substr($jm, 2, 4));
+        }
+        $lines[] = 'DTEND;TZID=Asia/Jakarta:' . $tglComp . 'T' . $js;
+
+        $lines[] = 'BEGIN:VALARM';
+        $lines[] = 'ACTION:DISPLAY';
+        $lines[] = ics_lipat_baris('DESCRIPTION:' . ics_escape($judul !== '' ? $judul : 'Pengingat seminar'));
+        $lines[] = 'TRIGGER:-PT1H';
+        $lines[] = 'END:VALARM';
+    } else {
+        $lines[] = 'DTSTART;VALUE=DATE:' . $tglComp;
+        $lines[] = 'DTEND;VALUE=DATE:' . date('Ymd', strtotime($tanggal . ' +1 day'));
+    }
+
+    $lines[] = 'END:VEVENT';
+    $lines[] = 'END:VCALENDAR';
+    return implode("\r\n", $lines) . "\r\n";
+}
