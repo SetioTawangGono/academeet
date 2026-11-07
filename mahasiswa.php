@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
+require __DIR__ . '/services.php';
 require_role('mahasiswa');
 
 $id_user = (int) $_SESSION['id_user'];
@@ -194,6 +195,17 @@ if (isset($_POST['daftar'])) {
         flash_set('danger', $ex->getMessage());
         redirect('mahasiswa.php?page=katalog');
     }
+}
+
+// ==========================================
+// BATALKAN PENDAFTARAN
+// ==========================================
+if (isset($_POST['batal_daftar'])) {
+    csrf_check();
+    $id_registrasi = (int) ($_POST['id_registrasi'] ?? 0);
+    [$type, $message] = batalkan_pendaftaran($conn, $id_registrasi, $id_user);
+    flash_set($type, $message);
+    redirect('mahasiswa.php?page=tiket');
 }
 
 // Data user terbaru
@@ -469,7 +481,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
         </form>
 
         <?php
-        $sql_tiket = "SELECT s.id_seminar, s.judul, s.tanggal, s.pemateri, r.kode_tiket, r.status_hadir
+        $sql_tiket = "SELECT s.id_seminar, s.judul, s.tanggal, s.pemateri, s.status AS status_seminar, r.id_registrasi, r.kode_tiket, r.status_hadir
             FROM registrations r JOIN seminars s ON r.id_seminar = s.id_seminar
             WHERE r.id_user = ?";
         $params_tiket = [$id_user];
@@ -535,6 +547,15 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             <a href="sertifikat.php?id=<?= (int) $t['id_seminar'] ?>" target="_blank" rel="noopener" class="btn btn-primary w-100 py-3 rounded-0 fw-bold">
                                 <i class="bi bi-file-earmark-pdf-fill me-2"></i> Unduh Sertifikat
                             </a>
+                        </div>
+                    <?php elseif ($t['status_seminar'] === 'Aktif' && $t['tanggal'] > date('Y-m-d')): ?>
+                        <div class="card-footer bg-light border-0 py-3 text-center">
+                            <button type="button" class="btn btn-outline-danger btn-sm fw-semibold rounded-pill js-batal-daftar"
+                                    data-bs-toggle="modal" data-bs-target="#modalBatal"
+                                    data-id="<?= (int) $t['id_registrasi'] ?>"
+                                    data-judul="<?= e($t['judul']) ?>">
+                                <i class="bi bi-x-circle me-1"></i> Batalkan Pendaftaran
+                            </button>
                         </div>
                     <?php else: ?>
                         <div class="card-footer bg-light border-0 py-3 text-center">
@@ -849,6 +870,38 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
 </div>
 <?php endif; ?>
 
+<?php if ($page == 'tiket'): ?>
+<!-- Modal Konfirmasi Batal -->
+<div class="modal fade" id="modalBatal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modalBatalLabel">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-body p-4 p-sm-5 text-center">
+                <div class="auth-brand-icon mx-auto mb-4" style="width: 68px; height: 68px; font-size: 2rem; background: #fee2e2; color: #dc2626; border-radius: 20px;">
+                    <i class="bi bi-x-circle-fill"></i>
+                </div>
+                <h5 class="fw-bold text-body-emphasis mb-2" id="modalBatalLabel">Batalkan Pendaftaran</h5>
+                <p class="text-muted mb-4">Yakin ingin membatalkan pendaftaran pada seminar ini? Kuota akan dikembalikan.</p>
+                <div class="p-3 bg-light rounded-4 border text-start mb-4">
+                    <div class="fw-bold text-dark" id="modalBatalJudul">-</div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <button type="button" class="btn btn-light w-100 py-3 fw-bold rounded-pill text-secondary" data-bs-dismiss="modal">Tidak</button>
+                    </div>
+                    <div class="col-6">
+                        <form method="POST" action="mahasiswa.php?page=tiket" class="h-100">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="batal_daftar" value="1">
+                            <input type="hidden" name="id_registrasi" id="modalBatalId" value="">
+                            <button type="submit" class="btn btn-danger w-100 py-3 fw-bold rounded-pill">Ya, Batalkan</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
@@ -859,6 +912,15 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             document.getElementById('modalSeminarJudul').textContent = btn.getAttribute('data-judul');
             document.getElementById('modalSeminarPemateri').textContent = btn.getAttribute('data-pemateri');
             document.getElementById('modalSeminarId').value = btn.getAttribute('data-id');
+        });
+    }
+
+    const modalBatal = document.getElementById('modalBatal');
+    if (modalBatal) {
+        modalBatal.addEventListener('show.bs.modal', function (event) {
+            const btn = event.relatedTarget;
+            document.getElementById('modalBatalJudul').textContent = btn.getAttribute('data-judul');
+            document.getElementById('modalBatalId').value = btn.getAttribute('data-id');
         });
     }
 
