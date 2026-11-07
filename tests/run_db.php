@@ -209,6 +209,25 @@ try {
     mysqli_query($conn, "DELETE FROM users WHERE id_user = $idHapus");
     $gone = mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user = $idHapus LIMIT 1"));
     $check('user terhapus tidak ditemukan di DB', $gone === null);
+
+    // ===== buat_admin =====
+    $emailAdmin = "admin{$tag}@test.local";
+    [$t, $msg, $idBaru] = buat_admin($conn, 'Admin Uji ' . $tag, $emailAdmin, 'passwordpanjang12');
+    $check('buat_admin sukses', $t === 'success' && $idBaru > 0);
+
+    $rowAdmin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT role, password FROM users WHERE id_user = " . (int) $idBaru));
+    $check('buat_admin role = admin', $rowAdmin !== null && $rowAdmin['role'] === 'admin');
+    $check('buat_admin hash != password asli', $rowAdmin !== null && $rowAdmin['password'] !== 'passwordpanjang12');
+    $check('buat_admin hash terverifikasi', $rowAdmin !== null && password_verify('passwordpanjang12', $rowAdmin['password']));
+
+    [$t, ] = buat_admin($conn, 'Admin Dua', $emailAdmin, 'passwordpanjang12');
+    $check('buat_admin email duplikat ditolak', $t === 'danger');
+
+    [$t, ] = buat_admin($conn, 'Admin Tiga', "pendek{$tag}@test.local", 'pendek');
+    $check('buat_admin password < 12 ditolak', $t === 'danger');
+
+    [$t, ] = buat_admin($conn, 'Admin Empat', 'bukan-email', 'passwordpanjang12');
+    $check('buat_admin email tidak valid ditolak', $t === 'danger');
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";
@@ -219,6 +238,7 @@ try {
     mysqli_query($conn, "DELETE FROM users WHERE email LIKE 'uji%test.local'");
     mysqli_query($conn, "DELETE FROM pemateri WHERE nama LIKE 'Pemateri Uji %'");
     mysqli_query($conn, "DELETE FROM auth_throttle WHERE scope LIKE 'test_%'");
+    mysqli_query($conn, "DELETE FROM users WHERE email LIKE '%{$tag}%@test.local'");
 }
 
 echo $failed === 0 ? "\nSemua tes DB lulus.\n" : "\n{$failed} tes DB gagal.\n";
