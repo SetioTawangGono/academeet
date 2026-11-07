@@ -435,7 +435,7 @@ if (isset($_POST['hapus_mahasiswa'])) {
         while ($r = mysqli_fetch_assoc($regs)) {
             $sid = (int) $r['id_seminar'];
             $jml = (int) $r['jml'];
-            mysqli_query($conn, "UPDATE seminars SET kuota = kuota + $jml WHERE id_seminar = $sid");
+            mysqli_query($conn, "UPDATE seminars SET kuota = LEAST(kuota + $jml, COALESCE(kuota_total, kuota + $jml)) WHERE id_seminar = $sid");
         }
 
         $stmt = mysqli_prepare($conn, "DELETE FROM registrations WHERE id_user = ?");
@@ -1266,7 +1266,7 @@ if (isset($_POST['reset_password'])) {
                                         $no++;
                                     }
                                 } else {
-                                    echo "<tr><td colspan='7' class='text-center py-4 text-muted'>" . ($q !== '' ? "Tidak ada mahasiswa yang cocok dengan pencarian \"$q\"." : 'Belum ada mahasiswa yang mendaftar.') . "</td></tr>";
+                                    echo "<tr><td colspan='7' class='text-center py-4 text-muted'>" . ($q !== '' ? 'Tidak ada mahasiswa yang cocok dengan pencarian "' . e($q) . '".' : 'Belum ada mahasiswa yang mendaftar.') . "</td></tr>";
                                 }
                                 ?>
                             </tbody>
@@ -1403,7 +1403,7 @@ if (isset($_POST['reset_password'])) {
                                         $no++;
                                     }
                                 } else {
-                                    echo "<tr><td colspan='8' class='text-center py-4 text-muted'>" . ($q !== '' ? "Tidak ada pemateri yang cocok dengan pencarian \"$q\"." : 'Belum ada data pemateri.') . "</td></tr>";
+                                    echo "<tr><td colspan='8' class='text-center py-4 text-muted'>" . ($q !== '' ? 'Tidak ada pemateri yang cocok dengan pencarian "' . e($q) . '".' : 'Belum ada data pemateri.') . "</td></tr>";
                                 }
                                 ?>
                             </tbody>
@@ -1813,7 +1813,7 @@ if (isset($_POST['reset_password'])) {
                                               </tr>";
                                     }
                                 } else {
-                                    echo "<tr><td colspan='5' class='text-center py-4 text-muted'>" . ($q !== '' ? "Tidak ada seminar yang cocok dengan pencarian \"$q\"." : 'Belum ada data seminar.') . "</td></tr>";
+                                    echo "<tr><td colspan='5' class='text-center py-4 text-muted'>" . ($q !== '' ? 'Tidak ada seminar yang cocok dengan pencarian "' . e($q) . '".' : 'Belum ada data seminar.') . "</td></tr>";
                                 }
                                 ?>
                             </tbody>
@@ -1823,6 +1823,8 @@ if (isset($_POST['reset_password'])) {
                 </div>
             <?php
             }
+            // Nilai isian lama hanya dipakai saat render form; bersihkan agar tidak bocor ke form lain.
+            unset($_SESSION['_old']);
             ?>
         </div>
     </main>

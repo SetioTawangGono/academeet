@@ -3,6 +3,7 @@
  * Layanan bisnis yang butuh DB. Fungsi murni terpisah dari HTML agar bisa dites.
  * Setiap fungsi menerima mysqli, memakai transaksi, dan mengembalikan [tipe, pesan].
  */
+require_once __DIR__ . '/bootstrap.php';
 
 /**
  * Batalkan pendaftaran tiket milik seorang mahasiswa.
@@ -45,7 +46,7 @@ function batalkan_pendaftaran(mysqli $conn, int $id_registrasi, int $id_user): a
             throw new RuntimeException('Tiket tidak ditemukan.');
         }
 
-        $stmt = mysqli_prepare($conn, "UPDATE seminars SET kuota = LEAST(kuota + 1, kuota_total) WHERE id_seminar = ?");
+        $stmt = mysqli_prepare($conn, "UPDATE seminars SET kuota = LEAST(kuota + 1, COALESCE(kuota_total, kuota + 1)) WHERE id_seminar = ?");
         mysqli_stmt_bind_param($stmt, 'i', $row['id_seminar']);
         mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
@@ -60,9 +61,9 @@ function batalkan_pendaftaran(mysqli $conn, int $id_registrasi, int $id_user): a
 
 /**
  * Ubah seminar (admin). Mengunci baris, memvalidasi, lalu UPDATE.
- * $data: judul, id_pemateri, tanggal, kuota_total (int), status (opsional untuk cek Selesai).
+ * $data: judul, id_pemateri, tanggal, kuota_total (int).
  * $poster: nama file poster baru (hasil upload di luar transaksi) atau null.
- * Mengembalikan [tipe, pesan, commit_ok]; poster lama dihapus hanya setelah commit oleh pemanggil.
+ * Mengembalikan [tipe, pesan, commit_ok]; poster lama dihapus setelah commit oleh pemanggil.
  */
 function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poster = null): array
 {
