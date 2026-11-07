@@ -197,3 +197,66 @@ function buat_admin(mysqli $conn, string $nama, string $email, string $password)
     mysqli_stmt_close($stmt);
     return ['success', 'Akun admin berhasil dibuat.', $id];
 }
+
+/**
+ * Throttle di database. Semua fungsi mengembalikan null bila query gagal (mis.
+ * tabel belum ada), supaya pemanggil bisa jatuh kembali ke throttle sesi.
+ * Jendela geser: hitung baris dengan attempted_at > sekarang - $detik.
+ */
+
+/** Apakah percobaan untuk kunci ini sudah mencapai batas dalam jendela $detik. */
+function throttle_terlalu_banyak(mysqli $conn, string $scope, string $key_hash, int $batas, int $detik): ?bool
+{
+    throttle_bersihkan_oportunistik($conn);
+    $stmt = mysqli_prepare($conn, "SELECT COUNT(*) AS c FROM auth_throttle
+        WHERE scope = ? AND key_hash = ? AND attempted_at > (NOW() - INTERVAL ? SECOND)");
+    if (!$stmt) {
+        return null;
+    }
+    mysqli_stmt_bind_param($stmt, 'ssi', $scope, $key_hash, $detik);
+    if (!mysqli_stmt_execute($stmt)) {
+        mysqli_stmt_close($stmt);
+        return null;
+    }
+    $c = (int) (mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['c'] ?? 0);
+    mysqli_stmt_close($stmt);
+    return $c >= $batas;
+}
+
+/** Catat satu percobaan. Mengembalikan true bila tersimpan. */
+function throttle_catat(mysqli $conn, string $scope, string $key_hash): bool
+{
+    $stmt = mysqli_prepare($conn, "INSERT INTO auth_throttle (scope, key_hash, attempted_at) VALUES (?, ?, NOW())");
+    if (!$stmt) {
+        return false;
+    }
+    mysqli_stmt_bind_param($stmt, 'ss', $scope, $key_hash);
+    $ok = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    return (bool) $ok;
+}
+
+/** Hapus semua percobaan untuk kunci ini (mis. setelah login sukses). */
+function throttle_hapus(mysqli $conn, string $scope, string $key_hash): bool
+{
+    $stmt = mysqli_prepare($conn, "DELETE FROM auth_throttle WHERE scope = ? AND key_hash = ?");
+    if (!$stmt) {
+        return false;
+    }
+    mysqli_stmt_bind_param($stmt, 'ss', $scope, $key_hash);
+    $ok = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    return (bool) $ok;
+}
+
+/**
+ * Bersihkan baris lebih tua dari 1 hari, oportunistik (~1% request). Kegagalan
+ * diabaikan (bukan jalur kritis). Tidak butuh cron.
+ */
+function throttle_bersihkan_oportunistik(mysqli $conn): void
+{
+    if (random_int(1, 100) !== 1) {
+        return;
+    }
+    @mysqli_query($conn, "DELETE FROM auth_throttle WHERE attempted_at < (NOW() - INTERVAL 1 DAY)");
+}

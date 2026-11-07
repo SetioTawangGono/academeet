@@ -143,6 +143,45 @@ try {
     $idSemSelesai = ins_seminar($conn, 'Seminar Selesai ' . $tag, $besok, 5, 'Selesai');
     [$t, ] = ubah_seminar($conn, $idSemSelesai, ['judul' => 'Y', 'id_pemateri' => $idPemateri, 'tanggal' => $besok, 'kuota_total' => 5]);
     $check('edit menolak seminar Selesai', $t === 'danger');
+
+    // ===== throttle DB =====
+    $sc = 'test_' . $tag;
+    $k1 = throttle_key($sc, 'kunci-satu');
+    $k2 = throttle_key($sc, 'kunci-dua');
+
+    // Batas tepat: 4 catat -> belum blokir (batas 5), catat ke-5 -> blokir.
+    $check('throttle awal tidak blokir', throttle_terlalu_banyak($conn, $sc, $k1, 5, 900) === false);
+    for ($i = 0; $i < 4; $i++) { throttle_catat($conn, $sc, $k1); }
+    $check('throttle 4 < 5 belum blokir', throttle_terlalu_banyak($conn, $sc, $k1, 5, 900) === false);
+    throttle_catat($conn, $sc, $k1);
+    $check('throttle 5 = 5 blokir', throttle_terlalu_banyak($conn, $sc, $k1, 5, 900) === true);
+
+    // Kunci terpisah per scope: kunci lain tidak terpengaruh.
+    $check('throttle kunci lain tidak blokir', throttle_terlalu_banyak($conn, $sc, $k2, 5, 900) === false);
+
+    // Jendela geser: baris lebih tua dari jendela tidak dihitung.
+    $kOld = throttle_key($sc, 'kunci-lama');
+    $stmt = mysqli_prepare($conn, "INSERT INTO auth_throttle (scope, key_hash, attempted_at) VALUES (?, ?, NOW() - INTERVAL 20 MINUTE)");
+    mysqli_stmt_bind_param($stmt, 'ss', $sc, $kOld);
+    for ($i = 0; $i < 6; $i++) { mysqli_stmt_execute($stmt); }
+    mysqli_stmt_close($stmt);
+    $check('throttle di luar jendela tidak dihitung', throttle_terlalu_banyak($conn, $sc, $kOld, 5, 900) === false);
+
+    // Hapus setelah sukses: kunci (email+IP) dibersihkan, kunci lain tetap.
+    throttle_hapus($conn, $sc, $k1);
+    $check('throttle_hapus menghapus kunci ybs', throttle_terlalu_banyak($conn, $sc, $k1, 5, 900) === false);
+    throttle_catat($conn, $sc, $k2);
+    $check('throttle_hapus tidak menyentuh kunci lain', throttle_terlalu_banyak($conn, $sc, $k2, 1, 900) === true);
+
+    // Pembersihan oportunistik: sisipkan baris tua lalu panggil langsung.
+    $kClean = throttle_key($sc, 'kunci-bersih');
+    $stmt = mysqli_prepare($conn, "INSERT INTO auth_throttle (scope, key_hash, attempted_at) VALUES (?, ?, NOW() - INTERVAL 2 DAY)");
+    mysqli_stmt_bind_param($stmt, 'ss', $sc, $kClean);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    mysqli_query($conn, "DELETE FROM auth_throttle WHERE attempted_at < (NOW() - INTERVAL 1 DAY)");
+    $left = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM auth_throttle WHERE scope = '$sc' AND key_hash = '$kClean'"))['c'];
+    $check('pembersihan hapus baris > 1 hari', $left === 0);
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";
@@ -152,6 +191,7 @@ try {
     mysqli_query($conn, "DELETE FROM seminars WHERE judul LIKE '% " . $tag . "'");
     mysqli_query($conn, "DELETE FROM users WHERE email LIKE 'uji%test.local'");
     mysqli_query($conn, "DELETE FROM pemateri WHERE nama LIKE 'Pemateri Uji %'");
+    mysqli_query($conn, "DELETE FROM auth_throttle WHERE scope LIKE 'test_%'");
 }
 
 echo $failed === 0 ? "\nSemua tes DB lulus.\n" : "\n{$failed} tes DB gagal.\n";

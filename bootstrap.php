@@ -214,6 +214,15 @@ function password_ok_admin(string $password): bool
 }
 
 /**
+ * Kunci throttle: SHA-256 dari "scope|nilai". Email/nilai dinormalisasi lowercase
+ * oleh pemanggil. Disimpan sebagai hash agar nilai asli (email/IP) tak tersimpan mentah.
+ */
+function throttle_key(string $scope, string $nilai): string
+{
+    return hash('sha256', $scope . '|' . strtolower(trim($nilai)));
+}
+
+/**
  * Jendela check-in: hanya boleh pada hari H. Mengembalikan pesan error tanggal,
  * atau null bila boleh check-in. Tanggal tidak valid dianggap jauh di masa depan.
  */

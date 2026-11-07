@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
+require __DIR__ . '/services.php';
 
 if (isset($_SESSION['role'])) {
     redirect($_SESSION['role'] === 'admin' ? 'admin.php' : 'mahasiswa.php');
@@ -11,13 +12,35 @@ if (isset($_POST['login'])) {
 
     $email = trim((string) ($_POST['email'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
-    // Throttle sederhana: maksimal 5 percobaan per 15 menit per sesi.
-    // shortcut: per sesi, upgrade ke per-IP/akun jika brute force terdistribusi.
+    // Throttle di DB (lapis 1): kunci per (email+IP) 5/15m, per IP 30/15m,
+    // per email global 20/15m. Bila DB tak tersedia, $dbBlokir tetap null dan
+    // logika jatuh ke throttle sesi lama (lapis 2) di bawah.
+    $window = 900;
+    $kEmailIp = throttle_key('login_ep', $email . '|' . $ip);
+    $kIp      = throttle_key('login_ip', $ip);
+    $kEmail   = throttle_key('login_em', $email);
+
+    $dbBlokir = null;
+    if ($conn instanceof mysqli) {
+        $c1 = throttle_terlalu_banyak($conn, 'login_ep', $kEmailIp, 5, $window);
+        $c2 = throttle_terlalu_banyak($conn, 'login_ip', $kIp, 30, $window);
+        $c3 = throttle_terlalu_banyak($conn, 'login_em', $kEmail, 20, $window);
+        if ($c1 === null || $c2 === null || $c3 === null) {
+            $dbBlokir = null; // gagal query: pakai throttle sesi
+            error_log('Throttle DB login gagal; jatuh ke throttle sesi.');
+        } else {
+            $dbBlokir = ($c1 || $c2 || $c3);
+        }
+    }
+
+    // Throttle sesi (lapis 2, lama): maksimal 5 percobaan per 15 menit per sesi.
     $now = time();
-    $attempts = array_values(array_filter($_SESSION['_login_attempts'] ?? [], static fn($t) => $t > $now - 900));
+    $attempts = array_values(array_filter($_SESSION['_login_attempts'] ?? [], static fn($t) => $t > $now - $window));
+    $sesiBlokir = count($attempts) >= 5;
 
-    if (count($attempts) >= 5) {
+    if ($dbBlokir === true || ($dbBlokir === null && $sesiBlokir)) {
         $error = 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.';
     } else {
         $stmt = mysqli_prepare($conn, "SELECT id_user, nama_lengkap, role, password FROM users WHERE email = ? LIMIT 1");
@@ -47,10 +70,20 @@ if (isset($_POST['login'])) {
             $_SESSION['nama']    = $data['nama_lengkap'];
             $_SESSION['role']    = $data['role'];
             $_SESSION['_last_active'] = time();
+            // Login sukses hanya menghapus kunci (email+IP), bukan kunci IP.
+            if ($conn instanceof mysqli) {
+                throttle_hapus($conn, 'login_ep', $kEmailIp);
+            }
             unset($_SESSION['_login_attempts'], $_SESSION['_csrf']);
             redirect($data['role'] === 'admin' ? 'admin.php' : 'mahasiswa.php');
         }
 
+        // Catat percobaan gagal ke DB (semua kunci) dan sesi.
+        if ($conn instanceof mysqli) {
+            throttle_catat($conn, 'login_ep', $kEmailIp);
+            throttle_catat($conn, 'login_ip', $kIp);
+            throttle_catat($conn, 'login_em', $kEmail);
+        }
         $attempts[] = $now;
         $_SESSION['_login_attempts'] = $attempts;
         $error = 'Email atau password salah.';

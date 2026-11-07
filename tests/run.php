@@ -30,6 +30,12 @@ $check('sesi_kedaluwarsa() tepat di batas = belum', sesi_kedaluwarsa(100, 1000, 
 $check('sesi_kedaluwarsa() lewat batas = kedaluwarsa', sesi_kedaluwarsa(100, 1001, 900) === true);
 $check('sesi_kedaluwarsa() baru aktif = belum', sesi_kedaluwarsa(999, 1000, 900) === false);
 
+// throttle_key(): SHA-256 dari "scope|nilai" (lowercase + trim), 64 hex.
+$check('throttle_key() 64 hex', (bool) preg_match('/^[0-9a-f]{64}$/', throttle_key('login_ep', 'A@B.com')));
+$check('throttle_key() lowercase sama', throttle_key('login_ep', 'A@B.com') === throttle_key('login_ep', 'a@b.com'));
+$check('throttle_key() scope beda -> hash beda', throttle_key('login_ep', 'a@b.com') !== throttle_key('login_ip', 'a@b.com'));
+$check('throttle_key() nilai beda -> hash beda', throttle_key('login_ep', 'a@b.com') !== throttle_key('login_ep', 'c@d.com'));
+
 // checkin_window_error(): kemarin boleh, hari ini boleh, besok ditolak, format salah ditolak.
 $hariIni = '2026-11-07';
 $check('checkin_window_error() kemarin = boleh', checkin_window_error('2026-11-06', $hariIni) === null);

@@ -1,18 +1,31 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
+require __DIR__ . '/services.php';
 
 $kode = trim((string) ($_GET['kode'] ?? ''));
 $data = null;
 $error_verif = '';
 
 if ($kode !== '') {
-    // Throttle: kode tiket hanya 6 hex, jadi batasi percobaan per sesi.
-    // shortcut: per sesi, upgrade ke per-IP jika enumerasi terdistribusi.
-    $now = time();
-    $attempts = array_values(array_filter($_SESSION['_verif_attempts'] ?? [], static fn($t) => $t > $now - 900));
+    // Throttle di DB (lapis 1): maksimal 10 percobaan per 15 menit per IP.
+    // Bila DB tak tersedia, $ipBlokir null dan jatuh ke throttle sesi (lapis 2).
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $window = 900;
+    $ipBlokir = null;
+    if ($conn instanceof mysqli) {
+        $ipBlokir = throttle_terlalu_banyak($conn, 'verif_ip', throttle_key('verif_ip', $ip), 10, $window);
+        if ($ipBlokir === null) {
+            error_log('Throttle DB verifikasi gagal; jatuh ke throttle sesi.');
+        }
+    }
 
-    if (count($attempts) >= 10) {
+    // Throttle sesi (lapis 2, lama): maksimal 10 percobaan per 15 menit per sesi.
+    $now = time();
+    $attempts = array_values(array_filter($_SESSION['_verif_attempts'] ?? [], static fn($t) => $t > $now - $window));
+    $sesiBlokir = count($attempts) >= 10;
+
+    if ($ipBlokir === true || ($ipBlokir === null && $sesiBlokir)) {
         $error_verif = 'Terlalu banyak percobaan verifikasi. Coba lagi dalam 15 menit.';
     } else {
         $stmt = mysqli_prepare($conn, "SELECT r.kode_tiket, r.status_hadir, u.nama_lengkap, s.judul, s.tanggal, s.pemateri
@@ -27,6 +40,9 @@ if ($kode !== '') {
         mysqli_stmt_close($stmt);
 
         if (!$data) {
+            if ($conn instanceof mysqli) {
+                throttle_catat($conn, 'verif_ip', throttle_key('verif_ip', $ip));
+            }
             $attempts[] = $now;
             $_SESSION['_verif_attempts'] = $attempts;
         }
