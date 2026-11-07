@@ -474,7 +474,7 @@ if (isset($_POST['reset_password'])) {
         flash_set('danger', 'Password baru minimal 8 karakter.');
     } else {
         $hash = password_hash($baru, PASSWORD_DEFAULT);
-        $stmt = mysqli_prepare($conn, "UPDATE users SET password = ? WHERE id_user = ? AND role = 'mahasiswa'");
+        $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, auth_version = auth_version + 1 WHERE id_user = ? AND role = 'mahasiswa'");
         mysqli_stmt_bind_param($stmt, 'si', $hash, $id_mhs);
         $ok = mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);

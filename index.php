@@ -43,7 +43,7 @@ if (isset($_POST['login'])) {
     if ($dbBlokir === true || ($dbBlokir === null && $sesiBlokir)) {
         $error = 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.';
     } else {
-        $stmt = mysqli_prepare($conn, "SELECT id_user, nama_lengkap, role, password FROM users WHERE email = ? LIMIT 1");
+        $stmt = mysqli_prepare($conn, "SELECT id_user, nama_lengkap, role, password, auth_version FROM users WHERE email = ? LIMIT 1");
         mysqli_stmt_bind_param($stmt, 's', $email);
         mysqli_stmt_execute($stmt);
         $data = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
@@ -69,6 +69,7 @@ if (isset($_POST['login'])) {
             $_SESSION['id_user'] = (int) $data['id_user'];
             $_SESSION['nama']    = $data['nama_lengkap'];
             $_SESSION['role']    = $data['role'];
+            $_SESSION['auth_version'] = (int) $data['auth_version'];
             $_SESSION['_last_active'] = time();
             // Login sukses hanya menghapus kunci (email+IP), bukan kunci IP.
             if ($conn instanceof mysqli) {

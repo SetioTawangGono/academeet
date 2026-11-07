@@ -173,12 +173,12 @@ function require_role(string $role): void
     }
     $_SESSION['_last_active'] = $now;
 
-    // Sesi bisa merujuk user yang sudah dihapus. Validasi ke DB sekali di sini
-    // agar halaman tidak fatal saat $user null. Fail-closed: kalau koneksi tak
-    // terduga, tetap tolak daripada meloloskan sesi basi.
+    // Sesi bisa merujuk user yang sudah dihapus, atau akun yang auth_version-nya
+    // sudah dinaikkan (password berubah/direset). Validasi ke DB sekali di sini
+    // per primary key. Fail-closed: kalau koneksi tak terduga, tetap tolak.
     global $conn;
     $stmt = ($conn instanceof mysqli)
-        ? mysqli_prepare($conn, 'SELECT 1 FROM users WHERE id_user = ? LIMIT 1')
+        ? mysqli_prepare($conn, 'SELECT auth_version FROM users WHERE id_user = ? LIMIT 1')
         : false;
     if (!$stmt) {
         $_SESSION = [];
@@ -187,11 +187,13 @@ function require_role(string $role): void
     }
     mysqli_stmt_bind_param($stmt, 'i', $_SESSION['id_user']);
     mysqli_stmt_execute($stmt);
-    $ada = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
     mysqli_stmt_close($stmt);
-    if (!$ada) {
+    if (!$row || (int) $row['auth_version'] !== (int) ($_SESSION['auth_version'] ?? -1)) {
         $_SESSION = [];
         session_destroy();
+        session_start();
+        flash_set('warning', 'Sesi tidak berlaku lagi, silakan login ulang.');
         redirect('index.php');
     }
 }

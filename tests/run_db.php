@@ -182,6 +182,33 @@ try {
     mysqli_query($conn, "DELETE FROM auth_throttle WHERE attempted_at < (NOW() - INTERVAL 1 DAY)");
     $left = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM auth_throttle WHERE scope = '$sc' AND key_hash = '$kClean'"))['c'];
     $check('pembersihan hapus baris > 1 hari', $left === 0);
+
+    // ===== auth_version =====
+    // User baru: auth_version default 0.
+    $idAV = ins_user($conn, 'AV ' . $tag, "av{$tag}@test.local");
+    $av0 = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user = $idAV"))['auth_version'];
+    $check('auth_version default 0', $av0 === 0);
+
+    // Naik saat password diganti (meniru ubah_password / reset admin).
+    $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, auth_version = auth_version + 1 WHERE id_user = ?");
+    $newHash = password_hash('baru-banget', PASSWORD_DEFAULT);
+    mysqli_stmt_bind_param($stmt, 'si', $newHash, $idAV);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    $av1 = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user = $idAV"))['auth_version'];
+    $check('auth_version naik saat ganti password', $av1 === $av0 + 1);
+
+    // Sesi dengan versi lama harus ditolak: cek langsung kondisi yang dipakai require_role().
+    $row = mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user = $idAV LIMIT 1"));
+    $sesiVersiLama = 0; // simulasi sesi sebelum ganti password
+    $check('sesi versi lama ditolak', $row !== null && (int) $row['auth_version'] !== $sesiVersiLama);
+    $check('sesi versi sama diterima', $row !== null && (int) $row['auth_version'] === $av1);
+
+    // User terhapus: query versi mengembalikan tidak ada baris.
+    $idHapus = ins_user($conn, 'Hapus ' . $tag, "hapus{$tag}@test.local");
+    mysqli_query($conn, "DELETE FROM users WHERE id_user = $idHapus");
+    $gone = mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user = $idHapus LIMIT 1"));
+    $check('user terhapus tidak ditemukan di DB', $gone === null);
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";

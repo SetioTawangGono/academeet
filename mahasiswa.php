@@ -97,11 +97,15 @@ if (isset($_POST['ubah_password'])) {
         flash_set('danger', 'Konfirmasi password baru tidak cocok.');
     } else {
         $hash = password_hash($baru, PASSWORD_DEFAULT);
-        $stmt = mysqli_prepare($conn, "UPDATE users SET password = ? WHERE id_user = ?");
+        $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, auth_version = auth_version + 1 WHERE id_user = ?");
         mysqli_stmt_bind_param($stmt, 'si', $hash, $id_user);
         $ok = mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
         flash_set($ok ? 'success' : 'danger', $ok ? 'Password berhasil diubah.' : 'Gagal mengubah password.');
+        if ($ok) {
+            // Sesi aktif ikut naik agar tidak ter-logout sendiri.
+            $_SESSION['auth_version'] = (int) ($_SESSION['auth_version'] ?? 0) + 1;
+        }
     }
     redirect('mahasiswa.php?page=profil');
 }
