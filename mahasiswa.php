@@ -708,66 +708,147 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
             </div>
         <?php else: ?>
         <?php
-        // Filter pencarian & status katalog (GET, whitelist aman)
-        $q_kat = is_string($_GET['q'] ?? null) ? trim($_GET['q']) : '';
+        // Filter katalog (GET, whitelist lewat normalisasi_filter_katalog()).
+        $f = normalisasi_filter_katalog($_GET);
+        $q_kat = $f['q'];
+        $kat_kat = $f['kat'];
+        $dari_kat = $f['dari'];
+        $sampai_kat = $f['sampai'];
+        $sedia_kat = $f['sedia'];
         $f_kat = in_array($_GET['f_kat'] ?? '', ['belum', 'sudah'], true) ? (string) $_GET['f_kat'] : '';
         $sort_kat = in_array($_GET['sort'] ?? '', ['terdekat', 'terlama'], true) ? (string) $_GET['sort'] : 'terdekat';
-        $filter_kat_aktif = $q_kat !== '' || $f_kat !== '';
+        $filter_kat_aktif = $q_kat !== '' || $kat_kat !== '' || $dari_kat !== '' || $sampai_kat !== '' || $sedia_kat !== 'semua' || $f_kat !== '';
+
+        // Bangun WHERE dinamis (prepared, tanpa konkatenasi nilai).
+        $where_kat = ["s.status = 'Aktif'", 's.tanggal >= CURDATE()'];
+        $params_kat = [];
+        $types_kat = '';
+        if ($q_kat !== '') {
+            $where_kat[] = "(s.judul LIKE ? ESCAPE '\\\\' OR s.pemateri LIKE ? ESCAPE '\\\\')";
+            $like = '%' . like_escape($q_kat) . '%';
+            $params_kat[] = $like; $params_kat[] = $like;
+            $types_kat .= 'ss';
+        }
+        if ($kat_kat !== '') {
+            $where_kat[] = 's.kategori = ?';
+            $params_kat[] = $kat_kat;
+            $types_kat .= 's';
+        }
+        if ($dari_kat !== '') {
+            $where_kat[] = 's.tanggal >= ?';
+            $params_kat[] = $dari_kat;
+            $types_kat .= 's';
+        }
+        if ($sampai_kat !== '') {
+            $where_kat[] = 's.tanggal <= ?';
+            $params_kat[] = $sampai_kat;
+            $types_kat .= 's';
+        }
+        if ($sedia_kat === 'tersedia') {
+            $where_kat[] = 's.kuota > 0';
+        } elseif ($sedia_kat === 'penuh') {
+            $where_kat[] = 's.kuota <= 0';
+        }
+        if ($f_kat === 'belum') {
+            $where_kat[] = 'NOT EXISTS(SELECT 1 FROM registrations r WHERE r.id_seminar = s.id_seminar AND r.id_user = ?)';
+            $params_kat[] = $id_user;
+            $types_kat .= 'i';
+        } elseif ($f_kat === 'sudah') {
+            $where_kat[] = 'EXISTS(SELECT 1 FROM registrations r WHERE r.id_seminar = s.id_seminar AND r.id_user = ?)';
+            $params_kat[] = $id_user;
+            $types_kat .= 'i';
+        }
+        $where_sql_kat = implode(' AND ', $where_kat);
+
+        // Hitung total untuk pagination.
+        $sql_count_kat = "SELECT COUNT(*) AS c FROM seminars s WHERE $where_sql_kat";
+        $stmt_count = mysqli_prepare($conn, $sql_count_kat);
+        if ($params_kat) {
+            mysqli_stmt_bind_param($stmt_count, $types_kat, ...$params_kat);
+        }
+        mysqli_stmt_execute($stmt_count);
+        $total_kat = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_count))['c'];
+        mysqli_stmt_close($stmt_count);
+
+        $per_page_kat = 9;
+        $total_page_kat = max(1, (int) ceil($total_kat / $per_page_kat));
+        $p_kat = min($f['p'], $total_page_kat);
+        $offset_kat = ($p_kat - 1) * $per_page_kat;
+
+        // Ambil halaman saat ini.
+        $sql_kat = "SELECT s.*, EXISTS(SELECT 1 FROM registrations r WHERE r.id_seminar = s.id_seminar AND r.id_user = ?) AS sudah_daftar
+            FROM seminars s WHERE $where_sql_kat
+            ORDER BY s.tanggal " . ($sort_kat === 'terlama' ? 'DESC' : 'ASC') . " LIMIT ? OFFSET ?";
+        $params_page = array_merge([$id_user], $params_kat);
+        $types_page = 'i' . $types_kat . 'ii';
+        $params_page[] = $per_page_kat;
+        $params_page[] = $offset_kat;
+
+        $stmt_kat = mysqli_prepare($conn, $sql_kat);
+        mysqli_stmt_bind_param($stmt_kat, $types_page, ...$params_page);
+        mysqli_stmt_execute($stmt_kat);
+        $result_kat = mysqli_stmt_get_result($stmt_kat);
+        $seminar_rows = [];
+        while ($row = mysqli_fetch_assoc($result_kat)) {
+            $seminar_rows[] = $row;
+        }
         ?>
         <div class="d-flex align-items-center justify-content-between mb-4">
             <h1 class="h5 fw-bold text-dark mb-0">
                 <i class="bi bi-calendar-check-fill text-primary me-2"></i>Katalog Seminar Aktif
+                <span class="badge badge-soft-primary rounded-pill ms-2 align-middle"><?= $total_kat ?></span>
             </h1>
         </div>
 
-        <form method="get" action="mahasiswa.php" class="filter-bar d-flex flex-wrap align-items-center gap-2 mb-4" role="search" aria-label="Filter katalog">
+        <form method="get" action="mahasiswa.php" class="filter-bar mb-4" role="search" aria-label="Filter katalog">
             <input type="hidden" name="page" value="katalog">
-            <div class="input-group input-group-sm search-field">
-                <button type="submit" class="input-group-text" aria-label="Cari seminar"><i class="bi bi-search"></i></button>
-                <input type="search" name="q" class="form-control" value="<?= e($q_kat) ?>" placeholder="Cari judul / pemateri" aria-label="Cari judul atau pemateri">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="input-group input-group-sm search-field">
+                    <button type="submit" class="input-group-text" aria-label="Cari seminar"><i class="bi bi-search"></i></button>
+                    <input type="search" name="q" class="form-control" value="<?= e($q_kat) ?>" placeholder="Cari judul / pemateri" aria-label="Cari judul atau pemateri">
+                </div>
+                <label for="kat" class="visually-hidden">Kategori</label>
+                <select name="kat" id="kat" class="form-select form-select-sm" style="width: auto;">
+                    <option value="">Semua kategori</option>
+                    <?php foreach (kategori_seminar() as $kat): ?>
+                        <option value="<?= e($kat) ?>" <?= $kat_kat === $kat ? 'selected' : '' ?>><?= e($kat) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <label for="f_kat" class="visually-hidden">Filter pendaftaran</label>
+                <select name="f_kat" id="f_kat" class="form-select form-select-sm" style="width: auto;">
+                    <option value="">Semua seminar</option>
+                    <option value="belum" <?= $f_kat === 'belum' ? 'selected' : '' ?>>Belum saya daftar</option>
+                    <option value="sudah" <?= $f_kat === 'sudah' ? 'selected' : '' ?>>Sudah saya daftar</option>
+                </select>
+                <label for="sedia" class="visually-hidden">Ketersediaan</label>
+                <select name="sedia" id="sedia" class="form-select form-select-sm" style="width: auto;">
+                    <option value="semua" <?= $sedia_kat === 'semua' ? 'selected' : '' ?>>Semua kuota</option>
+                    <option value="tersedia" <?= $sedia_kat === 'tersedia' ? 'selected' : '' ?>>Masih tersedia</option>
+                    <option value="penuh" <?= $sedia_kat === 'penuh' ? 'selected' : '' ?>>Kuota penuh</option>
+                </select>
+                <label for="sort_kat" class="visually-hidden">Urutkan</label>
+                <select name="sort" id="sort_kat" class="form-select form-select-sm" style="width: auto;">
+                    <option value="terdekat" <?= $sort_kat === 'terdekat' ? 'selected' : '' ?>>Terdekat</option>
+                    <option value="terlama" <?= $sort_kat === 'terlama' ? 'selected' : '' ?>>Terlama</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3">Filter</button>
+                <?php if ($filter_kat_aktif): ?>
+                    <a href="mahasiswa.php?page=katalog" class="btn btn-sm btn-light fw-semibold">Reset</a>
+                <?php endif; ?>
             </div>
-            <label for="f_kat" class="visually-hidden">Filter pendaftaran</label>
-            <select name="f_kat" id="f_kat" class="form-select form-select-sm" style="width: auto;">
-                <option value="">Semua seminar</option>
-                <option value="belum" <?= $f_kat === 'belum' ? 'selected' : '' ?>>Belum saya daftar</option>
-                <option value="sudah" <?= $f_kat === 'sudah' ? 'selected' : '' ?>>Sudah saya daftar</option>
-            </select>
-            <label for="sort_kat" class="visually-hidden">Urutkan</label>
-            <select name="sort" id="sort_kat" class="form-select form-select-sm" style="width: auto;">
-                <option value="terdekat" <?= $sort_kat === 'terdekat' ? 'selected' : '' ?>>Terdekat</option>
-                <option value="terlama" <?= $sort_kat === 'terlama' ? 'selected' : '' ?>>Terlama</option>
-            </select>
-            <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3">Filter</button>
-            <?php if ($filter_kat_aktif): ?>
-                <a href="mahasiswa.php?page=katalog" class="btn btn-sm btn-light fw-semibold">Reset</a>
-            <?php endif; ?>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <div class="input-group input-group-sm" style="width: auto;">
+                    <span class="input-group-text"><i class="bi bi-calendar-range" aria-hidden="true"></i></span>
+                    <input type="date" name="dari" class="form-control" value="<?= e($dari_kat) ?>" aria-label="Tanggal dari" title="Tanggal dari">
+                    <span class="input-group-text">s/d</span>
+                    <input type="date" name="sampai" class="form-control" value="<?= e($sampai_kat) ?>" aria-label="Tanggal sampai" title="Tanggal sampai">
+                </div>
+                <span class="small text-muted ms-auto">Menampilkan <?= count($seminar_rows) ?> dari <?= $total_kat ?> seminar</span>
+            </div>
         </form>
 
         <div class="row g-4">
             <?php
-            $sql_kat = "SELECT s.*, EXISTS(SELECT 1 FROM registrations r WHERE r.id_seminar = s.id_seminar AND r.id_user = ?) AS sudah_daftar
-                FROM seminars s WHERE s.status = 'Aktif' AND s.tanggal >= CURDATE()";
-            $params_kat = [$id_user];
-            $types_kat = 'i';
-            if ($q_kat !== '') {
-                $sql_kat .= " AND (s.judul LIKE ? OR s.pemateri LIKE ?)";
-                $like = '%' . $q_kat . '%';
-                $params_kat[] = $like; $params_kat[] = $like;
-                $types_kat .= 'ss';
-            }
-            $sql_kat .= " ORDER BY s.tanggal " . ($sort_kat === 'terlama' ? 'DESC' : 'ASC');
-
-            $stmt_kat = mysqli_prepare($conn, $sql_kat);
-            mysqli_stmt_bind_param($stmt_kat, $types_kat, ...$params_kat);
-            mysqli_stmt_execute($stmt_kat);
-            $result_kat = mysqli_stmt_get_result($stmt_kat);
-            $seminar_rows = [];
-            while ($row = mysqli_fetch_assoc($result_kat)) {
-                if ($f_kat === 'belum' && (int) $row['sudah_daftar'] === 1) continue;
-                if ($f_kat === 'sudah' && (int) $row['sudah_daftar'] === 0) continue;
-                $seminar_rows[] = $row;
-            }
-
             if (count($seminar_rows) > 0) {
                 foreach ($seminar_rows as $row) {
                     $tgl = date('d M Y', strtotime($row['tanggal']));
@@ -884,13 +965,14 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                 }
             } else {
                 if ($filter_kat_aktif) {
-                    echo "<div class='col-12'><div class='card card-custom p-5 text-center'><i class='bi bi-search text-muted display-4 mb-3 opacity-50' aria-hidden='true'></i><h2 class='h6 fw-bold text-dark'>Tidak ada seminar yang cocok</h2><p class='text-muted small mb-0'>Coba ubah kata kunci atau filter.</p><a href='mahasiswa.php?page=katalog' class='btn btn-sm btn-light mt-3'>Reset filter</a></div></div>";
+                    echo "<div class='col-12'><div class='card card-custom p-5 text-center'><i class='bi bi-search text-muted display-4 mb-3 opacity-50' aria-hidden='true'></i><h2 class='h6 fw-bold text-dark'>Tidak ada seminar yang cocok</h2><p class='text-muted small mb-0'>Coba ubah kata kunci, kategori, rentang tanggal, atau filter lainnya.</p><a href='mahasiswa.php?page=katalog' class='btn btn-sm btn-light mt-3'>Reset filter</a></div></div>";
                 } else {
                     echo "<div class='col-12'><div class='card card-custom p-5 text-center'><i class='bi bi-calendar-x text-muted display-4 mb-3 opacity-50' aria-hidden='true'></i><h2 class='h6 fw-bold text-dark'>Belum Ada Seminar Tersedia</h2><p class='text-muted mb-0'>Kembali lagi nanti untuk informasi seminar terbaru.</p></div></div>";
                 }
             }
             ?>
         </div>
+        <?= pagination_html($total_kat, $p_kat, $per_page_kat) ?>
     <?php endif; ?>
 </div>
 
