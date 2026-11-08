@@ -139,6 +139,14 @@ if (isset($_POST['tambah'])) {
         if ($tanggal < date('Y-m-d')) {
             throw new RuntimeException('Tanggal seminar tidak boleh di masa lalu.');
         }
+        $ttd_nama = trim(buang_karakter_kontrol((string) ($_POST['ttd_nama'] ?? '')));
+        $ttd_jabatan = trim(buang_karakter_kontrol((string) ($_POST['ttd_jabatan'] ?? '')));
+        $err_ttd = validasi_ttd($ttd_nama, $ttd_jabatan);
+        if ($err_ttd !== '') {
+            throw new RuntimeException($err_ttd);
+        }
+        $ttd_nama = $ttd_nama === '' ? null : $ttd_nama;
+        $ttd_jabatan = $ttd_jabatan === '' ? null : $ttd_jabatan;
         [$err_detail, $detail] = validasi_detail_seminar([
             'jam_mulai'   => $_POST['jam_mulai'] ?? null,
             'jam_selesai' => $_POST['jam_selesai'] ?? null,
@@ -162,8 +170,8 @@ if (isset($_POST['tambah'])) {
         $poster = upload_image($_FILES['poster'] ?? [], 'posters', 5000000);
         $nama_pemateri = $pmt['nama'];
         $status = 'Aktif';
-        $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi, kuota, kuota_total, status, poster) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        mysqli_stmt_bind_param($stmt, 'sissssssssiiss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $detail['jam_mulai'], $detail['jam_selesai'], $detail['lokasi'], $detail['link_online'], $detail['kategori'], $detail['deskripsi'], $kuota, $kuota, $status, $poster);
+        $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi, kuota, kuota_total, status, ttd_nama, ttd_jabatan, poster) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, 'sissssssssiissss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $detail['jam_mulai'], $detail['jam_selesai'], $detail['lokasi'], $detail['link_online'], $detail['kategori'], $detail['deskripsi'], $kuota, $kuota, $status, $ttd_nama, $ttd_jabatan, $poster);
         if (!mysqli_stmt_execute($stmt)) {
             throw new RuntimeException('Gagal menyimpan seminar.');
         }
@@ -185,6 +193,8 @@ if (isset($_POST['tambah'])) {
             'link_online' => (string) ($_POST['link_online'] ?? ''),
             'kategori' => (string) ($_POST['kategori'] ?? ''),
             'deskripsi' => (string) ($_POST['deskripsi'] ?? ''),
+            'ttd_nama' => (string) ($_POST['ttd_nama'] ?? ''),
+            'ttd_jabatan' => (string) ($_POST['ttd_jabatan'] ?? ''),
         ];
         flash_set('danger', $ex->getMessage());
     }
@@ -271,6 +281,8 @@ if (isset($_POST['edit_seminar'])) {
             'link_online' => $detail['link_online'],
             'kategori' => $detail['kategori'],
             'deskripsi' => $detail['deskripsi'],
+            'ttd_nama' => (string) ($_POST['ttd_nama'] ?? ''),
+            'ttd_jabatan' => (string) ($_POST['ttd_jabatan'] ?? ''),
         ], $poster_baru);
 
         if ($type === 'success') {
@@ -297,6 +309,8 @@ if (isset($_POST['edit_seminar'])) {
             'link_online' => (string) ($_POST['link_online'] ?? ''),
             'kategori' => (string) ($_POST['kategori'] ?? ''),
             'deskripsi' => (string) ($_POST['deskripsi'] ?? ''),
+            'ttd_nama' => (string) ($_POST['ttd_nama'] ?? ''),
+            'ttd_jabatan' => (string) ($_POST['ttd_jabatan'] ?? ''),
         ];
         flash_set('danger', $ex->getMessage());
     }
@@ -1245,6 +1259,16 @@ if (isset($_POST['impor_terapkan'])) {
                                     <div class="form-text text-muted small">Maksimal 2000 karakter.</div>
                                 </div>
                                 <div class="col-lg-6">
+                                    <label for="ttd_nama" class="form-label small fw-semibold text-secondary">Nama Penandatangan (opsional)</label>
+                                    <input type="text" class="form-control" id="ttd_nama" name="ttd_nama" maxlength="100" value="<?= e(old('ttd_nama')) ?>" placeholder="Nama pada sertifikat">
+                                    <div class="form-text text-muted small">Kosongkan untuk teks bawaan sertifikat.</div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="ttd_jabatan" class="form-label small fw-semibold text-secondary">Jabatan Penandatangan (opsional)</label>
+                                    <input type="text" class="form-control" id="ttd_jabatan" name="ttd_jabatan" maxlength="100" value="<?= e(old('ttd_jabatan')) ?>" placeholder="Contoh: Ketua Pelaksana">
+                                    <div class="form-text text-muted small">Bila diisi, nama penandatangan wajib diisi.</div>
+                                </div>
+                                <div class="col-lg-6">
                                     <label for="kuota" class="form-label small fw-semibold text-secondary">Kuota Peserta</label>
                                     <input type="number" class="form-control" id="kuota" name="kuota" value="<?= e(old('kuota')) ?>" placeholder="Contoh: 100" min="1" inputmode="numeric" required>
                                 </div>
@@ -1346,6 +1370,16 @@ if (isset($_POST['impor_terapkan'])) {
                                     <label for="deskripsi" class="form-label small fw-semibold text-secondary">Deskripsi (opsional)</label>
                                     <textarea class="form-control" id="deskripsi" name="deskripsi" rows="3" maxlength="2000" placeholder="Ringkasan acara, agenda, dsb."><?= e(old('deskripsi', (string) ($sem_edit['deskripsi'] ?? ''))) ?></textarea>
                                     <div class="form-text text-muted small">Maksimal 2000 karakter.</div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="ttd_nama" class="form-label small fw-semibold text-secondary">Nama Penandatangan (opsional)</label>
+                                    <input type="text" class="form-control" id="ttd_nama" name="ttd_nama" maxlength="100" value="<?= e(old('ttd_nama', (string) ($sem_edit['ttd_nama'] ?? ''))) ?>" placeholder="Nama pada sertifikat">
+                                    <div class="form-text text-muted small">Kosongkan untuk teks bawaan sertifikat.</div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="ttd_jabatan" class="form-label small fw-semibold text-secondary">Jabatan Penandatangan (opsional)</label>
+                                    <input type="text" class="form-control" id="ttd_jabatan" name="ttd_jabatan" maxlength="100" value="<?= e(old('ttd_jabatan', (string) ($sem_edit['ttd_jabatan'] ?? ''))) ?>" placeholder="Contoh: Ketua Pelaksana">
+                                    <div class="form-text text-muted small">Bila diisi, nama penandatangan wajib diisi.</div>
                                 </div>
                                 <div class="col-lg-6">
                                     <label for="kuota_total" class="form-label small fw-semibold text-secondary">Kuota Total Peserta</label>

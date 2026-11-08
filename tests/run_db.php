@@ -793,6 +793,55 @@ try {
     $cekPlain = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users WHERE password = '" . mysqli_real_escape_string($conn, $passAwal) . "'"))['c'];
     $check('password awal tidak tersimpan sebagai teks asli', $cekPlain === 0);
     $check('password awal tidak ada di $_SESSION', !in_array($passAwal, array_map('strval', $_SESSION ?? []), true));
+
+    // ===== Paket E1: F18 tanda tangan sertifikat (ubah_seminar) =====
+    $idPemTtd = ins_pemateri($conn, 'Pem TTD ' . $tag);
+    $idSemTtd = ins_seminar($conn, 'F18 TTD ' . $tag, $besok, 20, 'Aktif', ['jam_mulai' => '09:00']);
+    $jdiubahBefore = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemTtd"))['jadwal_diubah_at'];
+
+    // Simpan ttd terisi: jadwal tidak berubah -> jadwal_diubah_at tetap.
+    [$t, , ] = ubah_seminar($conn, $idSemTtd, [
+        'judul' => 'F18 TTD ' . $tag, 'id_pemateri' => $idPemTtd, 'tanggal' => $besok,
+        'kuota_total' => 20, 'jam_mulai' => '09:00',
+        'ttd_nama' => 'Dr. Ani Wijaya', 'ttd_jabatan' => 'Ketua Pelaksana',
+    ]);
+    $rowTtd = mysqli_fetch_assoc(mysqli_query($conn, "SELECT ttd_nama, ttd_jabatan, jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemTtd"));
+    $check('ubah_seminar simpan ttd terisi', $t === 'success' && $rowTtd['ttd_nama'] === 'Dr. Ani Wijaya' && $rowTtd['ttd_jabatan'] === 'Ketua Pelaksana');
+    $check('ubah_seminar ttd tidak isi jadwal_diubah_at', $rowTtd['jadwal_diubah_at'] === $jdiubahBefore);
+
+    // Kosong -> NULL.
+    [$t, , ] = ubah_seminar($conn, $idSemTtd, [
+        'judul' => 'F18 TTD ' . $tag, 'id_pemateri' => $idPemTtd, 'tanggal' => $besok,
+        'kuota_total' => 20, 'jam_mulai' => '09:00', 'ttd_nama' => '', 'ttd_jabatan' => '',
+    ]);
+    $rowTtd2 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT ttd_nama, ttd_jabatan FROM seminars WHERE id_seminar=$idSemTtd"));
+    $check('ubah_seminar ttd kosong -> NULL', $t === 'success' && $rowTtd2['ttd_nama'] === null && $rowTtd2['ttd_jabatan'] === null);
+
+    // Jabatan diisi tanpa nama -> ditolak, data tak berubah.
+    [$t, , ] = ubah_seminar($conn, $idSemTtd, [
+        'judul' => 'F18 TTD ' . $tag, 'id_pemateri' => $idPemTtd, 'tanggal' => $besok,
+        'kuota_total' => 20, 'jam_mulai' => '09:00', 'ttd_nama' => '', 'ttd_jabatan' => 'Sekretaris',
+    ]);
+    $rowTtd3 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT ttd_nama FROM seminars WHERE id_seminar=$idSemTtd"));
+    $check('ubah_seminar tolak jabatan tanpa nama', $t === 'danger' && $rowTtd3['ttd_nama'] === null);
+
+    // Karakter kontrol dibersihkan (bukan ditolak): 0x01 dibuang sebelum disimpan.
+    [$t, , ] = ubah_seminar($conn, $idSemTtd, [
+        'judul' => 'F18 TTD ' . $tag, 'id_pemateri' => $idPemTtd, 'tanggal' => $besok,
+        'kuota_total' => 20, 'jam_mulai' => '09:00', 'ttd_nama' => "Nama\x01Jahat", 'ttd_jabatan' => '',
+    ]);
+    $rowTtd4 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT ttd_nama FROM seminars WHERE id_seminar=$idSemTtd"));
+    $check('ubah_seminar bersihkan karakter kontrol', $t === 'success' && $rowTtd4['ttd_nama'] === 'NamaJahat');
+
+    // ===== Paket E1: F18 tes PDF (nama ttd vs teks lama) =====
+    $idMhsTtd = ins_user($conn, 'Mhs TTD ' . $tag, "mhsttd{$tag}@example.com");
+    ins_reg($conn, $idMhsTtd, $idSemTtd, 'Hadir', 'F18-' . $tag);
+    // Isi ttd lagi untuk uji PDF, lalu render lewat sertifikat.php (pakai sesi).
+    ubah_seminar($conn, $idSemTtd, [
+        'judul' => 'Seminar TTD ' . $tag, 'id_pemateri' => $idPemTtd, 'tanggal' => $besok,
+        'kuota_total' => 20, 'jam_mulai' => '09:00', 'ttd_nama' => 'Dr. Ani Wijaya', 'ttd_jabatan' => 'Ketua Pelaksana',
+    ]);
+    $check('F18 setup: ttd tersimpan untuk uji PDF', true);
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";

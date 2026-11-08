@@ -11,7 +11,7 @@ if ($id_seminar <= 0) {
     redirect('mahasiswa.php?page=tiket');
 }
 
-$stmt = mysqli_prepare($conn, "SELECT r.kode_tiket, u.nama_lengkap, s.judul, s.tanggal, s.pemateri
+$stmt = mysqli_prepare($conn, "SELECT r.kode_tiket, u.nama_lengkap, s.judul, s.tanggal, s.pemateri, s.ttd_nama, s.ttd_jabatan
     FROM registrations r
     JOIN users u ON r.id_user = u.id_user
     JOIN seminars s ON r.id_seminar = s.id_seminar
@@ -96,10 +96,15 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
 
     $y_ttd = 145;
 
+    // F18: bila kolom ttd diisi, pakai nama/jabatan itu; jika kosong, teks lama persis.
+    $ttd_nama_isi = trim((string) ($data['ttd_nama'] ?? ''));
+    $ttd_jabatan_isi = trim((string) ($data['ttd_jabatan'] ?? ''));
+    $pakai_ttd = ($ttd_nama_isi !== '');
+
     $pdf->SetFont('Times', '', 11);
     $pdf->SetTextColor($c_muted[0], $c_muted[1], $c_muted[2]);
     $pdf->SetXY(40, $y_ttd);
-    $pdf->Cell(70, 6, 'Ketua Pelaksana', 0, 1, 'C');
+    $pdf->Cell(70, 6, $pakai_ttd ? 'Penandatangan' : 'Ketua Pelaksana', 0, 1, 'C');
 
     $pdf->SetDrawColor(203, 213, 225);
     $pdf->SetLineWidth(0.5);
@@ -108,7 +113,12 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
     $pdf->SetFont('Times', 'B', 11);
     $pdf->SetTextColor($c_muted[0], $c_muted[1], $c_muted[2]);
     $pdf->SetXY(40, $y_ttd + 22);
-    $pdf->Cell(70, 6, 'Panitia AcadeMeet', 0, 1, 'C');
+    $pdf->Cell(70, 6, pdf_text($pakai_ttd ? strtoupper($ttd_nama_isi) : 'Panitia AcadeMeet'), 0, 1, 'C');
+    if ($pakai_ttd && $ttd_jabatan_isi !== '') {
+        $pdf->SetFont('Times', '', 9);
+        $pdf->SetXY(40, $y_ttd + 28);
+        $pdf->Cell(70, 5, pdf_text($ttd_jabatan_isi), 0, 1, 'C');
+    }
 
     $pdf->SetFont('Times', '', 11);
     $pdf->SetTextColor($c_muted[0], $c_muted[1], $c_muted[2]);
