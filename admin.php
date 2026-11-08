@@ -70,7 +70,7 @@ function handleCheckin(mysqli $conn, string $kode): array
         return ['warning', 'Tiket ini sudah pernah di-check-in sebelumnya.'];
     }
 
-    $stmt = mysqli_prepare($conn, "UPDATE registrations SET status_hadir = 'Hadir' WHERE kode_tiket = ? AND status_hadir = 'Belum Hadir'");
+    $stmt = mysqli_prepare($conn, "UPDATE registrations SET status_hadir = 'Hadir', checkin_at = NOW() WHERE kode_tiket = ? AND status_hadir = 'Belum Hadir'");
     mysqli_stmt_bind_param($stmt, 's', $kode);
     mysqli_stmt_execute($stmt);
     $affected = mysqli_stmt_affected_rows($stmt);

@@ -375,7 +375,7 @@ function pakai_token_reset(mysqli $conn, string $token, string $passwordBaru): a
 
         $idUser = (int) $row['id_user'];
         $newHash = password_hash($passwordBaru, PASSWORD_DEFAULT);
-        $up = mysqli_prepare($conn, "UPDATE users SET password = ?, auth_version = auth_version + 1 WHERE id_user = ?");
+        $up = mysqli_prepare($conn, "UPDATE users SET password = ?, wajib_ganti_password = 0, auth_version = auth_version + 1 WHERE id_user = ?");
         mysqli_stmt_bind_param($up, 'si', $newHash, $idUser);
         mysqli_stmt_execute($up);
         mysqli_stmt_close($up);
@@ -662,4 +662,243 @@ function proses_pengingat_h1(mysqli $conn, string $besok, callable $kirim, int $
     mysqli_stmt_close($klaim);
     mysqli_stmt_close($lepas);
     return $ringkas;
+}
+
+/**
+ * Check-in manual oleh admin/panitia untuk satu registrasi di seminar halaman.
+ * Aturan sama seperti scanner: seminar efektif Aktif, tanggal == hari ini, belum Hadir.
+ * Cegah manipulasi: registrasi harus benar milik $idSeminarHalaman.
+ * Mengembalikan [tipe, pesan].
+ */
+function checkin_manual(mysqli $conn, int $idRegistrasi, int $idSeminarHalaman): array
+{
+    if (!mysqli_begin_transaction($conn)) {
+        return ['danger', 'Gagal memulai transaksi.'];
+    }
+    try {
+        $stmt = mysqli_prepare($conn, "SELECT r.status_hadir, r.id_seminar, u.nama_lengkap, s.judul, s.status, s.tanggal
+            FROM registrations r
+            JOIN users u ON r.id_user = u.id_user
+            JOIN seminars s ON r.id_seminar = s.id_seminar
+            WHERE r.id_registrasi = ? FOR UPDATE");
+        mysqli_stmt_bind_param($stmt, 'i', $idRegistrasi);
+        mysqli_stmt_execute($stmt);
+        $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+
+        if (!$row) {
+            throw new RuntimeException('Peserta tidak ditemukan.');
+        }
+        if ((int) $row['id_seminar'] !== $idSeminarHalaman) {
+            throw new RuntimeException('Peserta bukan bagian dari seminar ini.');
+        }
+        if ($row['status'] !== 'Aktif') {
+            throw new RuntimeException('Seminar ini sudah ditutup. Check-in tidak dapat dilakukan.');
+        }
+        $jendela = checkin_window_error((string) $row['tanggal'], date('Y-m-d'));
+        if ($jendela !== null) {
+            throw new RuntimeException($jendela);
+        }
+        if ($row['status_hadir'] === 'Hadir') {
+            throw new RuntimeException('Peserta ini sudah pernah di-check-in.');
+        }
+
+        $stmt = mysqli_prepare($conn, "UPDATE registrations SET status_hadir = 'Hadir', checkin_at = NOW() WHERE id_registrasi = ? AND status_hadir = 'Belum Hadir'");
+        mysqli_stmt_bind_param($stmt, 'i', $idRegistrasi);
+        mysqli_stmt_execute($stmt);
+        $affected = mysqli_stmt_affected_rows($stmt);
+        mysqli_stmt_close($stmt);
+        if ($affected !== 1) {
+            throw new RuntimeException('Peserta ini sudah pernah di-check-in.');
+        }
+
+        mysqli_commit($conn);
+        return ['success', 'Check-in berhasil: ' . $row['nama_lengkap'] . ' - ' . $row['judul']];
+    } catch (Throwable $ex) {
+        mysqli_rollback($conn);
+        return ['danger', $ex instanceof RuntimeException ? $ex->getMessage() : 'Gagal check-in.'];
+    }
+}
+
+/**
+ * Koreksi check-in (HANYA admin): kembalikan status Hadir → Belum Hadir + checkin_at NULL.
+ * Syarat: seminar efektif Aktif dan tanggal >= hari ini (hari H). Seminar efektif Selesai
+ * tidak bisa dikoreksi. Kuota tidak berubah. Mengembalikan [tipe, pesan].
+ */
+function batalkan_checkin(mysqli $conn, int $idRegistrasi, int $idSeminarHalaman): array
+{
+    if (!mysqli_begin_transaction($conn)) {
+        return ['danger', 'Gagal memulai transaksi.'];
+    }
+    try {
+        $stmt = mysqli_prepare($conn, "SELECT r.status_hadir, r.id_seminar, u.nama_lengkap, s.status, s.tanggal
+            FROM registrations r
+            JOIN users u ON r.id_user = u.id_user
+            JOIN seminars s ON r.id_seminar = s.id_seminar
+            WHERE r.id_registrasi = ? FOR UPDATE");
+        mysqli_stmt_bind_param($stmt, 'i', $idRegistrasi);
+        mysqli_stmt_execute($stmt);
+        $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+
+        if (!$row) {
+            throw new RuntimeException('Peserta tidak ditemukan.');
+        }
+        if ((int) $row['id_seminar'] !== $idSeminarHalaman) {
+            throw new RuntimeException('Peserta bukan bagian dari seminar ini.');
+        }
+        $hariIni = date('Y-m-d');
+        if (seminar_status_efektif((string) $row['status'], (string) $row['tanggal'], $hariIni) !== 'Aktif') {
+            throw new RuntimeException('Seminar yang sudah selesai tidak dapat dikoreksi.');
+        }
+        if ((string) $row['tanggal'] < $hariIni) {
+            throw new RuntimeException('Koreksi check-in hanya dapat dilakukan pada hari seminar.');
+        }
+        if ($row['status_hadir'] !== 'Hadir') {
+            throw new RuntimeException('Peserta ini belum check-in.');
+        }
+
+        $stmt = mysqli_prepare($conn, "UPDATE registrations SET status_hadir = 'Belum Hadir', checkin_at = NULL WHERE id_registrasi = ? AND status_hadir = 'Hadir'");
+        mysqli_stmt_bind_param($stmt, 'i', $idRegistrasi);
+        mysqli_stmt_execute($stmt);
+        $affected = mysqli_stmt_affected_rows($stmt);
+        mysqli_stmt_close($stmt);
+        if ($affected !== 1) {
+            throw new RuntimeException('Peserta ini belum check-in.');
+        }
+
+        mysqli_commit($conn);
+        return ['success', 'Check-in ' . $row['nama_lengkap'] . ' dibatalkan.'];
+    } catch (Throwable $ex) {
+        mysqli_rollback($conn);
+        return ['danger', $ex instanceof RuntimeException ? $ex->getMessage() : 'Gagal membatalkan check-in.'];
+    }
+}
+
+/**
+ * Buat akun panitia. Nama <=100, email valid & <=100 belum dipakai, password sesuai aturan
+ * panitia (min 10, maks 72 byte). nim/prodi NULL, notif_email 0, wajib_ganti_password 1.
+ * Mengembalikan [tipe, pesan, id_user|null].
+ */
+function buat_panitia(mysqli $conn, string $nama, string $email, string $password): array
+{
+    $nama = trim($nama);
+    $email = trim($email);
+
+    if ($nama === '' || $email === '') {
+        return ['danger', 'Nama dan email wajib diisi.', null];
+    }
+    if (str_len($nama) > 100) {
+        return ['danger', 'Nama maksimal 100 karakter.', null];
+    }
+    if (str_len($email) > 100 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return ['danger', 'Format email tidak valid atau lebih dari 100 karakter.', null];
+    }
+    if (strlen($password) > password_max_bytes()) {
+        return ['danger', 'Password terlalu panjang (maksimal 72 byte).', null];
+    }
+    if (!password_ok_untuk_role('panitia', $password)) {
+        return ['danger', 'Password panitia minimal 10 karakter.', null];
+    }
+
+    $stmt = mysqli_prepare($conn, "SELECT id_user FROM users WHERE email = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 's', $email);
+    mysqli_stmt_execute($stmt);
+    $ada = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    if ($ada) {
+        return ['danger', 'Email sudah dipakai akun lain.', null];
+    }
+
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $role = 'panitia';
+    $stmt = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, email, password, role, notif_email, wajib_ganti_password) VALUES (?, ?, ?, ?, 0, 1)");
+    mysqli_stmt_bind_param($stmt, 'ssss', $nama, $email, $hash, $role);
+    $ok = mysqli_stmt_execute($stmt);
+    if (!$ok) {
+        $errno = mysqli_errno($conn);
+        mysqli_stmt_close($stmt);
+        return ['danger', $errno === 1062 ? 'Email sudah dipakai akun lain.' : 'Gagal membuat akun panitia.', null];
+    }
+    $id = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($stmt);
+    return ['success', 'Akun panitia berhasil dibuat. Minta panitia mengganti password saat login pertama.', $id];
+}
+
+/**
+ * Reset password akun panitia (HANYA role panitia). password sesuai aturan panitia.
+ * Mengisi wajib_ganti_password = 1 dan menaikkan auth_version. Mengembalikan [tipe, pesan].
+ */
+function reset_password_panitia(mysqli $conn, int $idPanitia, string $passwordBaru): array
+{
+    if (strlen($passwordBaru) > password_max_bytes()) {
+        return ['danger', 'Password terlalu panjang (maksimal 72 byte).'];
+    }
+    if (!password_ok_untuk_role('panitia', $passwordBaru)) {
+        return ['danger', 'Password panitia minimal 10 karakter.'];
+    }
+    $hash = password_hash($passwordBaru, PASSWORD_DEFAULT);
+    $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, wajib_ganti_password = 1, auth_version = auth_version + 1 WHERE id_user = ? AND role = 'panitia'");
+    mysqli_stmt_bind_param($stmt, 'si', $hash, $idPanitia);
+    $ok = mysqli_stmt_execute($stmt);
+    $affected = mysqli_stmt_affected_rows($stmt);
+    mysqli_stmt_close($stmt);
+    if (!$ok || $affected !== 1) {
+        return ['danger', 'Akun panitia tidak ditemukan.'];
+    }
+    return ['success', 'Password panitia berhasil direset. Panitia wajib menggantinya saat login.'];
+}
+
+/** Hapus akun panitia (HANYA role panitia). Mengembalikan [tipe, pesan]. */
+function hapus_panitia(mysqli $conn, int $idPanitia): array
+{
+    $stmt = mysqli_prepare($conn, "DELETE FROM users WHERE id_user = ? AND role = 'panitia'");
+    mysqli_stmt_bind_param($stmt, 'i', $idPanitia);
+    $ok = mysqli_stmt_execute($stmt);
+    $affected = mysqli_stmt_affected_rows($stmt);
+    mysqli_stmt_close($stmt);
+    if (!$ok || $affected !== 1) {
+        return ['danger', 'Akun panitia tidak ditemukan.'];
+    }
+    return ['success', 'Akun panitia berhasil dihapus.'];
+}
+
+/**
+ * Ganti password wajib (semua role login). Password baru harus valid untuk role,
+ * berbeda dari password sekarang, dan maksimal 72 byte. Menurunkan wajib_ganti_password
+ * dan menaikkan auth_version; pemanggil memperbarui sesi aktif. Mengembalikan [tipe, pesan].
+ */
+function ganti_password_wajib(mysqli $conn, int $idUser, string $role, string $passwordBaru, string $konfirmasi): array
+{
+    if (strlen($passwordBaru) > password_max_bytes()) {
+        return ['danger', 'Password terlalu panjang (maksimal 72 byte).'];
+    }
+    if (!password_ok_untuk_role($role, $passwordBaru)) {
+        return ['danger', 'Password minimal ' . password_min_untuk_role($role) . ' karakter.'];
+    }
+    if ($passwordBaru !== $konfirmasi) {
+        return ['danger', 'Konfirmasi password tidak sama.'];
+    }
+
+    $stmt = mysqli_prepare($conn, "SELECT password FROM users WHERE id_user = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'i', $idUser);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    if (!$row) {
+        return ['danger', 'Akun tidak ditemukan.'];
+    }
+    if (password_verify($passwordBaru, (string) $row['password'])) {
+        return ['danger', 'Password baru harus berbeda dari password sekarang.'];
+    }
+
+    $hash = password_hash($passwordBaru, PASSWORD_DEFAULT);
+    $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, wajib_ganti_password = 0, auth_version = auth_version + 1 WHERE id_user = ?");
+    mysqli_stmt_bind_param($stmt, 'si', $hash, $idUser);
+    if (!mysqli_stmt_execute($stmt)) {
+        mysqli_stmt_close($stmt);
+        return ['danger', 'Gagal menyimpan password baru.'];
+    }
+    mysqli_stmt_close($stmt);
+    return ['success', 'Password berhasil diganti.'];
 }
