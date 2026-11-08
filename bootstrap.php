@@ -504,6 +504,119 @@ function xlsx_bangun(array $header, array $baris): string
     return $path;
 }
 
+/**
+ * Render bar chart sebagai SVG inline (tanpa library/CDN). Murni, bisa dites.
+ * $data  : list ['label'=>string, 'nilai'=>int|float, 'teks'=>?string(opsional, tampilan nilai)]
+ * $opsi  : ['judul'=>string, 'satuan'=>string, 'warna'=>string(CSS var), 'tinggi'=>int, 'arah'=?]
+ * Warna lewat CSS var (token tema) agar dark mode benar. Setiap teks di-escape.
+ */
+function svg_bar_chart(array $data, array $opsi = []): string
+{
+    $judul    = (string) ($opsi['judul'] ?? '');
+    $warna    = (string) ($opsi['warna'] ?? 'var(--bs-primary, #2563EB)');
+    $tinggi   = max(120, (int) ($opsi['tinggi'] ?? 220));
+    $label_max = max(40, (int) ($opsi['label_max'] ?? 90));
+
+    // Kanvas.
+    $W = 640;
+    $pad_kiri = 48;
+    $pad_kanan = 16;
+    $pad_atas = $judul !== '' ? 34 : 16;
+    $pad_bawah = 58;
+    $H = $tinggi + $pad_atas;
+    $plot_w = $W - $pad_kiri - $pad_kanan;
+    $plot_h = $tinggi - $pad_atas;
+    $baseline = $pad_atas + $plot_h;
+
+    $idJudul = 'chart-title-' . substr(hash('sha256', $judul . serialize($data)), 0, 10);
+    $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_XML1, 'UTF-8');
+
+    // Label panjang dipotong.
+    $potong = static function (string $s) use ($label_max): string {
+        if (mb_strlen($s) <= $label_max) {
+            return $s;
+        }
+        return mb_substr($s, 0, $label_max - 1) . '…';
+    };
+
+    if (empty($data)) {
+        $t = 'Belum ada data';
+        return '<svg class="paketd-chart" viewBox="0 0 ' . $W . ' ' . $H . '" width="100%" role="img" aria-label="' . $esc($t) . '" xmlns="http://www.w3.org/2000/svg">'
+            . '<title>' . $esc($t) . '</title>'
+            . '<text x="' . ($W / 2) . '" y="' . ($H / 2) . '" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="currentColor" opacity="0.6">' . $esc($t) . '</text>'
+            . '</svg>';
+    }
+
+    $n = count($data);
+    $maxVal = 0.0;
+    foreach ($data as $d) {
+        $maxVal = max($maxVal, (float) ($d['nilai'] ?? 0));
+    }
+
+    $svg = '<svg class="paketd-chart" viewBox="0 0 ' . $W . ' ' . $H . '" width="100%" role="img" aria-labelledby="' . $idJudul . '" xmlns="http://www.w3.org/2000/svg">';
+    $svg .= '<title id="' . $idJudul . '">' . $esc($judul !== '' ? $judul : 'Grafik data') . '</title>';
+
+    // Judul kanvas.
+    if ($judul !== '') {
+        $svg .= '<text x="' . $pad_kiri . '" y="18" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="currentColor">' . $esc($judul) . '</text>';
+    }
+
+    // Sumbu Y (baseline).
+    $svg .= '<line x1="' . $pad_kiri . '" y1="' . $baseline . '" x2="' . ($W - $pad_kanan) . '" y2="' . $baseline . '" stroke="currentColor" stroke-opacity="0.25" stroke-width="1"/>';
+
+    // Grid + label nilai maksimum.
+    if ($maxVal > 0) {
+        $svg .= '<text x="' . ($pad_kiri - 6) . '" y="' . ($pad_atas + 4) . '" text-anchor="end" font-family="Arial,sans-serif" font-size="10" fill="currentColor" opacity="0.6">' . $esc((string) (int) ceil($maxVal)) . '</text>';
+        $svg .= '<text x="' . ($pad_kiri - 6) . '" y="' . ($baseline + 4) . '" text-anchor="end" font-family="Arial,sans-serif" font-size="10" fill="currentColor" opacity="0.6">0</text>';
+    }
+
+    $slot = $plot_w / $n;
+    $bar_w = min(56, $slot * 0.62);
+    foreach ($data as $i => $d) {
+        $val = (float) ($d['nilai'] ?? 0);
+        $label = (string) ($d['label'] ?? '');
+        $teks = (string) ($d['teks'] ?? (string) (int) $val);
+        $cx = $pad_kiri + $slot * ($i + 0.5);
+        $x = $cx - $bar_w / 2;
+        // maxVal = 0 tidak membagi nol: semua bar tinggi 0.
+        $h = $maxVal > 0 ? ($val / $maxVal) * $plot_h : 0;
+        if ($h < 0) { $h = 0; }
+        $y = $baseline - $h;
+
+        if ($val > 0 && $h < 2) { $h = 2; $y = $baseline - 2; }
+
+        $svg .= '<rect x="' . round($x, 1) . '" y="' . round($y, 1) . '" width="' . round($bar_w, 1) . '" height="' . round($h, 1) . '" rx="2" fill="' . $esc($warna) . '"/>';
+        // Nilai di atas bar.
+        $svg .= '<text x="' . round($cx, 1) . '" y="' . round($y - 4, 1) . '" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="currentColor">' . $esc($teks) . '</text>';
+        // Label sumbu X (dipotong, rotasi bila panjang).
+        $lbl = $potong($label);
+        $svg .= '<text x="' . round($cx, 1) . '" y="' . ($baseline + 14) . '" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="currentColor" opacity="0.8" transform="rotate(-25 ' . round($cx, 1) . ' ' . ($baseline + 14) . ')">' . $esc($lbl) . '</text>';
+    }
+
+    $svg .= '</svg>';
+    return $svg;
+}
+
+/** Tabel angka "Lihat data" untuk melengkapi grafik (aksesibilitas). */
+function svg_chart_details(array $data, array $header = ['Label', 'Nilai']): string
+{
+    $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    $html = '<details class="paketd-chart-data"><summary>Lihat data</summary><table class="table table-sm mb-0"><thead><tr>';
+    foreach ($header as $h) {
+        $html .= '<th scope="col">' . $esc((string) $h) . '</th>';
+    }
+    $html .= '</tr></thead><tbody>';
+    if (empty($data)) {
+        $html .= '<tr><td colspan="' . count($header) . '" class="text-muted">Belum ada data</td></tr>';
+    } else {
+        foreach ($data as $d) {
+            $html .= '<tr><td>' . $esc((string) ($d['label'] ?? '')) . '</td><td>' . $esc((string) ($d['teks'] ?? (string) (int) ($d['nilai'] ?? 0))) . '</td></tr>';
+        }
+    }
+    $html .= '</tbody></table></details>';
+    return $html;
+}
+
 function pdf_text(string $value): string
 {
     return function_exists('iconv')

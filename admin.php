@@ -534,7 +534,7 @@ if (isset($_POST['reset_password'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.10">
+    <link rel="stylesheet" href="style.css?v=2.11">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -701,6 +701,44 @@ if (isset($_POST['reset_password'])) {
                             <div class="stat-value"><?= $tot_hadir ?></div>
                             <div class="stat-icon stat-icon--pink">
                                 <i class="bi bi-check-circle-fill"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grafik dashboard -->
+                <?php
+                require_once __DIR__ . '/services.php';
+                $grafik_populer = statistik_seminar_populer($conn, 5);
+                $grafik_kehadiran = statistik_kehadiran_seminar($conn, 10);
+                $data_populer = [];
+                foreach ($grafik_populer as $g) {
+                    $data_populer[] = ['label' => $g['judul'], 'nilai' => $g['terdaftar'], 'teks' => (string) $g['terdaftar']];
+                }
+                $data_kehadiran = [];
+                foreach ($grafik_kehadiran as $g) {
+                    $persen = $g['terdaftar'] > 0 ? round($g['hadir'] / $g['terdaftar'] * 100) : 0;
+                    $data_kehadiran[] = [
+                        'label' => $g['judul'],
+                        'nilai' => $persen,
+                        'teks' => $persen . '% (' . $g['hadir'] . '/' . $g['terdaftar'] . ')',
+                    ];
+                }
+                ?>
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-xl-6">
+                        <div class="card card-custom card-static h-100">
+                            <div class="card-body">
+                                <?= svg_bar_chart($data_kehadiran, ['judul' => 'Tingkat Kehadiran per Seminar (%)', 'warna' => 'var(--bs-success, #198754)']) ?>
+                                <?= svg_chart_details($data_kehadiran, ['Seminar', 'Hadir / Terdaftar']) ?>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-xl-6">
+                        <div class="card card-custom card-static h-100">
+                            <div class="card-body">
+                                <?= svg_bar_chart($data_populer, ['judul' => '5 Seminar Terpopuler (Pendaftar)', 'warna' => 'var(--bs-primary, #2563EB)']) ?>
+                                <?= svg_chart_details($data_populer, ['Seminar', 'Pendaftar']) ?>
                             </div>
                         </div>
                     </div>

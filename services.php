@@ -403,3 +403,56 @@ function ambil_data_ics(mysqli $conn, int $idUser, int $idRegistrasi): ?array
     mysqli_stmt_close($stmt);
     return $row ?: null;
 }
+
+/**
+ * Statistik kehadiran: 10 seminar efektif-Selesai terakhir (status Selesai atau tanggal < hari ini),
+ * dengan jumlah terdaftar & hadir. Read-only, satu query agregat (tanpa N+1).
+ * Mengembalikan list ['judul'=>, 'terdaftar'=>int, 'hadir'=>int] urut seminar terbaru.
+ */
+function statistik_kehadiran_seminar(mysqli $conn, int $limit = 10): array
+{
+    $limit = max(1, min(50, $limit));
+    $sql = "SELECT s.judul,
+                   COUNT(r.id_registrasi) AS terdaftar,
+                   COALESCE(SUM(r.status_hadir = 'Hadir'), 0) AS hadir
+            FROM seminars s
+            LEFT JOIN registrations r ON r.id_seminar = s.id_seminar
+            WHERE s.status = 'Selesai' OR s.tanggal < CURDATE()
+            GROUP BY s.id_seminar, s.judul, s.tanggal
+            ORDER BY s.tanggal DESC, s.id_seminar DESC
+            LIMIT " . (int) $limit;
+    $res = mysqli_query($conn, $sql);
+    $out = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $out[] = [
+            'judul' => (string) $row['judul'],
+            'terdaftar' => (int) $row['terdaftar'],
+            'hadir' => (int) $row['hadir'],
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Statistik 5 seminar terpopuler berdasarkan jumlah pendaftar (semua seminar). Read-only.
+ * Mengembalikan list ['judul'=>, 'terdaftar'=>int] urut terbanyak.
+ */
+function statistik_seminar_populer(mysqli $conn, int $limit = 5): array
+{
+    $limit = max(1, min(50, $limit));
+    $sql = "SELECT s.judul, COUNT(r.id_registrasi) AS terdaftar
+            FROM seminars s
+            LEFT JOIN registrations r ON r.id_seminar = s.id_seminar
+            GROUP BY s.id_seminar, s.judul
+            ORDER BY terdaftar DESC, s.judul ASC
+            LIMIT " . (int) $limit;
+    $res = mysqli_query($conn, $sql);
+    $out = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $out[] = [
+            'judul' => (string) $row['judul'],
+            'terdaftar' => (int) $row['terdaftar'],
+        ];
+    }
+    return $out;
+}

@@ -170,6 +170,35 @@ $check('csv_bangun() nilai ber-koma tidak pecah kolom', count($row2) === 6);
 $check('csv_bangun() formula dinetralkan', $csvRows[2][1] === "'=cmd|calc");
 @unlink($csvPath);
 
+// --- Chart (F12): helper murni svg_bar_chart ---
+$svgKosong = svg_bar_chart([], ['judul' => 'A']);
+$check('svg_bar_chart() data kosong -> "Belum ada data"', str_contains($svgKosong, 'Belum ada data'));
+$check('svg_bar_chart() data kosong tetap SVG well-formed', (bool) @simplexml_load_string($svgKosong));
+$svgNol = svg_bar_chart([['label' => 'A', 'nilai' => 0], ['label' => 'B', 'nilai' => 0]], ['judul' => 'Z']);
+$check('svg_bar_chart() semua nol tidak membagi nol (well-formed)', (bool) @simplexml_load_string($svgNol));
+$check('svg_bar_chart() semua nol tetap SVG valid', str_contains($svgNol, '<svg'));
+$svgOk = svg_bar_chart([['label' => 'Hadir', 'nilai' => 5], ['label' => '<X>&', 'nilai' => 10]], ['judul' => 'Judul <chart> & me', 'warna' => 'var(--bs-primary)']);
+$check('svg_bar_chart() output well-formed', (bool) @simplexml_load_string($svgOk));
+$check('svg_bar_chart() label di-escape', str_contains($svgOk, '&lt;X&gt;&amp;'));
+$check('svg_bar_chart() judul di-escape', str_contains($svgOk, 'Judul &lt;chart&gt; &amp; me'));
+$check('svg_bar_chart() punya role=img', str_contains($svgOk, 'role="img"'));
+$check('svg_bar_chart() punya <title>', str_contains($svgOk, '<title'));
+$check('svg_bar_chart() warna dari token tema', str_contains($svgOk, 'var(--bs-primary)'));
+$panjangLbl = str_repeat('judul seminar sangat panjang ', 5);
+$svgPotong = svg_bar_chart([['label' => $panjangLbl, 'nilai' => 1]]);
+$check('svg_bar_chart() label panjang dipotong (… muncul)', str_contains($svgPotong, '…'));
+$svgBesar = svg_bar_chart([['label' => 'A', 'nilai' => 999999]], ['judul' => 'B']);
+$check('svg_bar_chart() angka besar tetap well-formed', (bool) @simplexml_load_string($svgBesar));
+// Angka besar tidak keluar kanvas -> koordinat y positif.
+preg_match('/<rect x="[0-9.]+" y="(-?[0-9.]+)"/', $svgBesar, $m);
+$check('svg_bar_chart() bar angka besar tidak keluar kanvas (y>=0)', isset($m[1]) && (float) $m[1] >= 0);
+$detKosong = svg_chart_details([]);
+$check('svg_chart_details() data kosong -> pesan', str_contains($detKosong, 'Belum ada data'));
+$detOk = svg_chart_details([['label' => '<a>', 'nilai' => 3, 'teks' => '3']]);
+$check('svg_chart_details() label di-escape', str_contains($detOk, '&lt;a&gt;'));
+$check('svg_chart_details() pakai <details>', str_contains($detOk, '<details'));
+
+
 
 $_GET = ['p' => 1, 'q' => ''];
 $check('list_page() default', list_page() === [1, 10, '']);

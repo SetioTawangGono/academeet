@@ -1395,3 +1395,10 @@ body, html {
 [data-bs-theme="dark"] .alert .btn-close:hover {
     opacity: 1;
 }
+
+/* Grafik dashboard (Paket D, F12) — SVG inline server-side */
+.paketd-chart { display: block; max-width: 100%; height: auto; color: var(--bs-body-color); }
+.paketd-chart text { fill: currentColor; }
+.paketd-chart-data { margin-top: .5rem; }
+.paketd-chart-data > summary { cursor: pointer; font-size: .85rem; color: var(--bs-secondary-color); }
+.paketd-chart-data table { font-size: .85rem; }
