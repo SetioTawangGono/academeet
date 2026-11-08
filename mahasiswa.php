@@ -485,7 +485,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
         </form>
 
         <?php
-        $sql_tiket = "SELECT s.id_seminar, s.judul, s.tanggal, s.pemateri, s.status AS status_seminar, r.id_registrasi, r.kode_tiket, r.status_hadir
+        $sql_tiket = "SELECT s.id_seminar, s.judul, s.tanggal, s.pemateri, s.status AS status_seminar, s.jam_mulai, s.jam_selesai, s.lokasi, s.link_online, s.kategori, s.deskripsi, r.id_registrasi, r.kode_tiket, r.status_hadir
             FROM registrations r JOIN seminars s ON r.id_seminar = s.id_seminar
             WHERE r.id_user = ?";
         $params_tiket = [$id_user];
@@ -530,8 +530,34 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             <span class="small text-muted fw-semibold"><i class="bi bi-calendar3 me-1"></i> <?= e(date('d M Y', strtotime($t['tanggal']))) ?></span>
                         </div>
                         <h3 class="h6 fw-bold text-dark mb-2 text-truncate-2" style="min-height: 48px; line-height: 1.5;"><?= e($t['judul']) ?></h3>
-                        <div class="small text-muted mb-4">
+                        <div class="small text-muted mb-3">
                             <i class="bi bi-person-fill text-primary me-2"></i><?= e($t['pemateri']) ?>
+                        </div>
+                        <?php
+                        $t_kategori = (string) ($t['kategori'] ?? 'Umum');
+                        $t_jam = !empty($t['jam_mulai'])
+                            ? substr((string) $t['jam_mulai'], 0, 5) . (!empty($t['jam_selesai']) ? '-' . substr((string) $t['jam_selesai'], 0, 5) : '') . ' WIB'
+                            : 'Jam akan diumumkan';
+                        $t_lokasi = !empty($t['lokasi']) ? (string) $t['lokasi'] : '';
+                        ?>
+                        <div class="mb-3">
+                            <span class="badge badge-soft-primary rounded-pill px-2 py-1 fw-semibold mb-2"><?= e($t_kategori) ?></span>
+                            <div class="small text-muted d-flex align-items-center mb-1">
+                                <i class="bi bi-clock text-primary me-2" aria-hidden="true"></i><span><?= e($t_jam) ?></span>
+                            </div>
+                            <?php if ($t_lokasi !== ''): ?>
+                                <div class="small text-muted d-flex align-items-center mb-1">
+                                    <i class="bi bi-geo-alt text-primary me-2" aria-hidden="true"></i><span><?= e($t_lokasi) ?></span>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (!empty($t['deskripsi'])): ?>
+                                <p class="small text-muted mt-2 mb-0" style="line-height: 1.5;"><?= nl2br(e($t['deskripsi'])) ?></p>
+                            <?php endif; ?>
+                            <?php if (!empty($t['link_online'])): ?>
+                                <a href="<?= e($t['link_online']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-light-primary fw-semibold rounded-pill mt-2">
+                                    <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i> Buka tautan
+                                </a>
+                            <?php endif; ?>
                         </div>
                         <div class="bg-light p-4 rounded-4 text-center border dashed-border position-relative">
                             <div class="position-absolute ticket-notch ticket-notch--left rounded-circle" style="width: 20px; height: 20px; left: -10px; top: 50%; margin-top: -10px;"></div>
@@ -749,6 +775,23 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                     $kuota_total = (int) ($row['kuota_total'] ?? $row['kuota']);
                     $terisi = max(0, $kuota_total - (int) $row['kuota']);
                     $penuh = (int) $row['kuota'] <= 0;
+                    $kategori_row = (string) ($row['kategori'] ?? 'Umum');
+                    $jam_tampil = !empty($row['jam_mulai'])
+                        ? substr((string) $row['jam_mulai'], 0, 5) . (!empty($row['jam_selesai']) ? '-' . substr((string) $row['jam_selesai'], 0, 5) : '') . ' WIB'
+                        : 'Jam akan diumumkan';
+                    $lokasi_tampil = !empty($row['lokasi'])
+                        ? '<i class="bi bi-geo-alt text-primary me-2" aria-hidden="true"></i><span class="text-truncate">' . e($row['lokasi']) . '</span>'
+                        : (!empty($row['link_online'])
+                            ? '<i class="bi bi-camera-video text-primary me-2" aria-hidden="true"></i><span>Online</span>'
+                            : '<i class="bi bi-geo-alt text-muted me-2" aria-hidden="true"></i><span class="text-muted">Lokasi akan diumumkan</span>');
+                    $ringkas = '';
+                    if (!empty($row['deskripsi'])) {
+                        $teks = (string) $row['deskripsi'];
+                        if (str_len($teks) > 120) {
+                            $teks = (function_exists('mb_substr') ? mb_substr($teks, 0, 120, 'UTF-8') : substr($teks, 0, 120)) . '…';
+                        }
+                        $ringkas = $teks;
+                    }
             ?>
             <div class="col-md-6 col-lg-4">
                 <div class="card card-custom seminar-card h-100 overflow-hidden d-flex flex-column border-0 shadow-sm">
@@ -774,6 +817,9 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                         </div>
                     </div>
                     <div class="card-body p-4 d-flex flex-column flex-grow-1">
+                        <div class="mb-2">
+                            <span class="badge badge-soft-primary rounded-pill px-2 py-1 fw-semibold"><?= e($kategori_row) ?></span>
+                        </div>
                         <h3 class="h6 card-title fw-bold text-dark mb-3" style="min-height: 48px; line-height: 1.5;"><?= e($row['judul']) ?></h3>
 
                         <div class="mb-3">
@@ -781,10 +827,18 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                                 <i class="bi bi-person-circle text-primary me-2" aria-hidden="true"></i>
                                 <span class="text-truncate"><?= e($row['pemateri']) ?></span>
                             </div>
-                            <div class="small text-muted d-flex align-items-center">
+                            <div class="small text-muted mb-2 d-flex align-items-center">
                                 <i class="bi bi-calendar3 text-primary me-2" aria-hidden="true"></i>
                                 <span><?= e($tgl) ?></span>
+                                <span class="mx-1">·</span>
+                                <span><?= e($jam_tampil) ?></span>
                             </div>
+                            <div class="small text-muted d-flex align-items-center">
+                                <?= $lokasi_tampil ?>
+                            </div>
+                            <?php if ($ringkas !== ''): ?>
+                                <p class="small text-muted mt-2 mb-0" style="line-height: 1.5;"><?= e($ringkas) ?></p>
+                            <?php endif; ?>
                             <?php if (!empty($row['id_pemateri'])): ?>
                                 <a href="mahasiswa.php?page=pemateri&id=<?= (int) $row['id_pemateri'] ?>" class="btn btn-sm btn-link p-0 text-primary fw-semibold mt-1">
                                     Lihat Profil Pemateri <i class="bi bi-arrow-right-short"></i>
