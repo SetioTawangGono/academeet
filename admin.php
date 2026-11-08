@@ -17,7 +17,7 @@ $role_aktif = (string) ($_SESSION['role'] ?? '');
 // ==========================================================
 if ($role_aktif === 'panitia') {
     $aksi_post = '';
-    foreach (['checkin', 'checkin_manual', 'tambah', 'selesai', 'edit_seminar', 'hapus', 'tambah_pemateri', 'hapus_pemateri', 'hapus_mahasiswa', 'reset_password', 'tambah_panitia', 'reset_password_panitia', 'hapus_panitia', 'impor_pratinjau', 'impor_terapkan'] as $kandidat) {
+    foreach (['checkin', 'checkin_manual', 'batalkan_checkin', 'tambah', 'selesai', 'edit_seminar', 'hapus', 'tambah_pemateri', 'hapus_pemateri', 'hapus_mahasiswa', 'reset_password', 'tambah_panitia', 'reset_password_panitia', 'hapus_panitia', 'impor_pratinjau', 'impor_terapkan'] as $kandidat) {
         if (isset($_POST[$kandidat])) {
             $aksi_post = $kandidat;
             break;
@@ -558,7 +558,9 @@ if (isset($_POST['reset_password'])) {
     $id_mhs = (int) ($_POST['id_user'] ?? 0);
     $baru = (string) ($_POST['password_baru'] ?? '');
 
-    if (!password_ok($baru)) {
+    if (strlen($baru) > password_max_bytes()) {
+        flash_set('danger', 'Password terlalu panjang (maksimal 72 byte).');
+    } elseif (!password_ok_untuk_role('mahasiswa', $baru)) {
         flash_set('danger', 'Password baru minimal 8 karakter.');
     } else {
         $hash = password_hash($baru, PASSWORD_DEFAULT);
@@ -1418,8 +1420,6 @@ if (isset($_POST['impor_terapkan'])) {
                             </div>
                             <h4 class="fw-bold text-dark mb-1">Check-in Kehadiran</h4>
                             <p class="text-muted small mb-4">Scan QR code atau input kode tiket untuk memvalidasi peserta.</p>
-
-                            <?= flash_html() ?>
 
                             <!-- Tab Switcher -->
                             <div class="d-flex gap-2 mb-4" role="group" aria-label="Mode check-in">

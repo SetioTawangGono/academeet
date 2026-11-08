@@ -31,6 +31,11 @@ $nama_mahasiswa = $data['nama_lengkap'];
 $tanggal_format = date('d F Y', strtotime($data['tanggal']));
 $tahun = date('Y', strtotime($data['tanggal']));
 
+// F18: nama/jabatan penandatangan bila kolom ttd terisi; dipakai PDF & preview HTML.
+$ttd_nama_isi = trim((string) ($data['ttd_nama'] ?? ''));
+$ttd_jabatan_isi = trim((string) ($data['ttd_jabatan'] ?? ''));
+$pakai_ttd = ($ttd_nama_isi !== '');
+
 if (isset($_GET['download']) && $_GET['download'] === 'true') {
     require __DIR__ . '/fpdf.php';
     ob_start();
@@ -95,11 +100,6 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
     $pdf->Cell(297, 7, 'Yang diselenggarakan pada tanggal ' . $tanggal_format, 0, 1, 'C');
 
     $y_ttd = 145;
-
-    // F18: bila kolom ttd diisi, pakai nama/jabatan itu; jika kosong, teks lama persis.
-    $ttd_nama_isi = trim((string) ($data['ttd_nama'] ?? ''));
-    $ttd_jabatan_isi = trim((string) ($data['ttd_jabatan'] ?? ''));
-    $pakai_ttd = ($ttd_nama_isi !== '');
 
     $pdf->SetFont('Times', '', 11);
     $pdf->SetTextColor($c_muted[0], $c_muted[1], $c_muted[2]);
@@ -202,9 +202,12 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
 
                         <div class="row text-center mt-3 mt-md-4 g-0">
                             <div class="col-6 border-end px-1 px-md-3">
-                                <small class="text-muted d-block" style="font-size: clamp(0.5rem, 1.6vw, 0.85rem);">Ketua Pelaksana</small>
+                                <small class="text-muted d-block" style="font-size: clamp(0.5rem, 1.6vw, 0.85rem);"><?= $pakai_ttd ? 'Penandatangan' : 'Ketua Pelaksana' ?></small>
                                 <div class="border-bottom fw-bold mt-2 mb-1" style="width: 60%; margin: 0.5rem auto;"></div>
-                                <small class="text-muted" style="font-size: clamp(0.55rem, 1.6vw, 0.85rem);">Panitia AcadeMeet</small>
+                                <small class="text-muted" style="font-size: clamp(0.55rem, 1.6vw, 0.85rem);"><?= e($pakai_ttd ? strtoupper($ttd_nama_isi) : 'Panitia AcadeMeet') ?></small>
+                                <?php if ($pakai_ttd && $ttd_jabatan_isi !== ''): ?>
+                                    <small class="text-muted d-block" style="font-size: clamp(0.5rem, 1.5vw, 0.8rem);"><?= e($ttd_jabatan_isi) ?></small>
+                                <?php endif; ?>
                             </div>
                             <div class="col-6 px-1 px-md-3">
                                 <small class="text-muted d-block" style="font-size: clamp(0.55rem, 1.6vw, 0.85rem);">Ketua Program Studi</small>
