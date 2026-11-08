@@ -709,50 +709,49 @@ if (isset($_POST['reset_password'])) {
                 <!-- Grafik dashboard -->
                 <?php
                 require_once __DIR__ . '/services.php';
-                $grafik_bulanan = statistik_pendaftar_bulanan($conn, 12);
+                require_once __DIR__ . '/grafik.php';
+                $hariIniG = date('Y-m-d');
+                $serie90 = serie_harian(statistik_pendaftar_harian($conn, date('Y-m-d', strtotime('-89 day')) . ' 00:00:00'), date('Y-m-d', strtotime('-89 day')), 90);
+                $serie30 = serie_harian(statistik_pendaftar_harian($conn, date('Y-m-d', strtotime('-29 day')) . ' 00:00:00'), date('Y-m-d', strtotime('-29 day')), 30);
+                $serie7 = serie_harian(statistik_pendaftar_harian($conn, date('Y-m-d', strtotime('-6 day')) . ' 00:00:00'), date('Y-m-d', strtotime('-6 day')), 7);
+                $tanpa_waktu = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE created_at IS NULL"))['c'];
+
                 $grafik_populer = statistik_seminar_populer($conn, 5);
                 $grafik_kehadiran = statistik_kehadiran_seminar($conn, 10);
-                $data_bulanan = $grafik_bulanan['bulan'];
-                $data_populer = [];
+                $maksPopuler = 0;
+                foreach ($grafik_populer as $g) { $maksPopuler = max($maksPopuler, (int) $g['terdaftar']); }
+                $baris_populer = [];
+                $nomor = 0;
                 foreach ($grafik_populer as $g) {
-                    $data_populer[] = ['label' => $g['judul'], 'nilai' => $g['terdaftar'], 'teks' => (string) $g['terdaftar']];
+                    $nomor++;
+                    $baris_populer[] = [
+                        'judul' => $g['judul'], 'nilai' => $g['terdaftar'], 'maks' => $maksPopuler,
+                        'teks' => (string) $g['terdaftar'], 'nomor' => $nomor,
+                    ];
                 }
-                $data_kehadiran = [];
+                $baris_kehadiran = [];
                 foreach ($grafik_kehadiran as $g) {
                     $persen = $g['terdaftar'] > 0 ? round($g['hadir'] / $g['terdaftar'] * 100) : 0;
-                    $data_kehadiran[] = [
-                        'label' => $g['judul'],
-                        'nilai' => $persen,
-                        'teks' => $persen . '% (' . $g['hadir'] . '/' . $g['terdaftar'] . ')',
+                    $baris_kehadiran[] = [
+                        'judul' => $g['judul'], 'nilai' => $persen, 'maks' => 100,
+                        'teks' => $persen . '%', 'sub' => $g['hadir'] . ' dari ' . $g['terdaftar'] . ' terdaftar hadir',
                     ];
                 }
                 ?>
-                <div class="row g-3 mb-4">
-                    <div class="col-12">
-                        <div class="card card-custom card-static">
-                            <div class="card-body">
-                                <?= svg_bar_chart($data_bulanan, ['judul' => 'Pendaftar per Bulan', 'warna' => 'var(--bs-primary, #2563EB)']) ?>
-                                <?php if ((int) $grafik_bulanan['tanpa_waktu'] > 0): ?>
-                                    <p class="text-muted small mb-0"><?= (int) $grafik_bulanan['tanpa_waktu'] ?> pendaftaran lama tanpa catatan waktu</p>
-                                <?php endif; ?>
-                                <?= svg_chart_details($data_bulanan, ['Bulan', 'Pendaftar']) ?>
-                            </div>
+                <div class="mb-4">
+                    <?= grafik_area_html($serie90, $serie30, $serie7, $tanpa_waktu) ?>
+                </div>
+                <div class="paketd-cards mb-4">
+                    <div class="card card-custom card-static h-100">
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-3">Tingkat Kehadiran per Seminar</h6>
+                            <?= grafik_daftar_html($baris_kehadiran) ?>
                         </div>
                     </div>
-                    <div class="col-12 col-xl-6">
-                        <div class="card card-custom card-static h-100">
-                            <div class="card-body">
-                                <?= svg_bar_chart($data_kehadiran, ['judul' => 'Tingkat Kehadiran per Seminar (%)', 'warna' => 'var(--bs-success, #198754)']) ?>
-                                <?= svg_chart_details($data_kehadiran, ['Seminar', 'Hadir / Terdaftar']) ?>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-xl-6">
-                        <div class="card card-custom card-static h-100">
-                            <div class="card-body">
-                                <?= svg_bar_chart($data_populer, ['judul' => '5 Seminar Terpopuler (Pendaftar)', 'warna' => 'var(--bs-primary, #2563EB)']) ?>
-                                <?= svg_chart_details($data_populer, ['Seminar', 'Pendaftar']) ?>
-                            </div>
+                    <div class="card card-custom card-static h-100">
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-3">5 Seminar Terpopuler (Pendaftar)</h6>
+                            <?= grafik_daftar_html($baris_populer) ?>
                         </div>
                     </div>
                 </div>
@@ -2116,5 +2115,6 @@ if (isset($_POST['reset_password'])) {
     });
 </script>
 <script src="theme.js?v=2.10" defer></script>
+<script src="grafik.js?v=1.0" defer></script>
 </body>
 </html>
