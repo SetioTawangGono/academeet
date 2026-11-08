@@ -728,6 +728,71 @@ try {
     // ===== Paket E1: query mahasiswa tidak menyertakan panitia =====
     $cMhs = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users WHERE role='mahasiswa' AND email='{$emailPan}'"))['c'];
     $check('query role=mahasiswa tidak hitung panitia', $cMhs === 0);
+
+    // ===== Paket E1: pratinjau_impor_csv (read-only) =====
+    $csvBersih = "nim,nama,prodi,email\n"
+        . "90{$tag},Impor Satu,Teknik Informatika,imp1_{$tag}@example.com\n"
+        . "91{$tag},Impor Dua,Sistem Informasi,imp2_{$tag}@example.com\n";
+    $usersBefore = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users"))['c'];
+    $prev = pratinjau_impor_csv($conn, $csvBersih);
+    $usersAfter = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users"))['c'];
+    $check('pratinjau valid 2 baris, 0 kesalahan', count($prev['valid']) === 2 && $prev['kesalahan'] === []);
+    $check('pratinjau tidak menulis users', $usersAfter === $usersBefore);
+    $check('pratinjau normalisasi prodi ke bentuk kanonik', $prev['valid'][0]['prodi'] === 'Teknik Informatika');
+
+    // Duplikat NIM yang sudah ada di DB (akun uji di atas).
+    $csvDupNim = "nim,nama,prodi,email\n"
+        . "{$tag}N,Impor Dup,Manajemen Informatika,dup_{$tag}_a@example.com\n";
+    $testUser = ins_user($conn, 'Impor Pegang NIM ' . $tag, "impnim{$tag}@example.com");
+    mysqli_query($conn, "UPDATE users SET nim = 'N{$tag}' WHERE id_user=$testUser");
+    $csvDupNim = "nim,nama,prodi,email\nN{$tag},Impor Dup,Manajemen Informatika,dup_{$tag}_a@example.com\n";
+    $prevDup = pratinjau_impor_csv($conn, $csvDupNim);
+    $check('pratinjau deteksi NIM sudah terdaftar', count($prevDup['valid']) === 0 && $prevDup['kesalahan'] !== []);
+
+    // Duplikat email case-insensitive terhadap DB.
+    $csvDupMail = "nim,nama,prodi,email\nD{$tag},Impor Dup2,Manajemen Informatika,IMPNIM{$tag}@EXAMPLE.COM\n";
+    $prevDupM = pratinjau_impor_csv($conn, $csvDupMail);
+    $check('pratinjau deteksi email duplikat case-insensitive', count($prevDupM['valid']) === 0 && $prevDupM['kesalahan'] !== []);
+
+    // Duplikat di dalam file + prodi tak dikenal + header hilang.
+    $csvDupFile = "nim,nama,prodi,email\nF{$tag},A,Teknik Informatika,df_{$tag}@example.com\nF{$tag},B,Sistem Informasi,df2_{$tag}@example.com\n";
+    $prevDF = pratinjau_impor_csv($conn, $csvDupFile);
+    $check('pratinjau deteksi NIM duplikat dalam file', count($prevDF['valid']) === 1 && count($prevDF['kesalahan']) === 1);
+    $prevProdi = pratinjau_impor_csv($conn, "nim,nama,prodi,email\nP{$tag},A,Prodi Ngawur,prodi_{$tag}@example.com\n");
+    $check('pratinjau tolak prodi tak dikenal', count($prevProdi['valid']) === 0 && $prevProdi['kesalahan'] !== []);
+    $prevHdr = pratinjau_impor_csv($conn, "nim,nama,email\nX,Y,z@example.com\n");
+    $check('pratinjau tolak header kurang kolom', count($prevHdr['valid']) === 0 && $prevHdr['kesalahan'] !== []);
+
+    // ===== Paket E1: terapkan_impor =====
+    $passAwal = 'passawal8';
+    [$t, , $jml] = terapkan_impor($conn, $prev['valid'], $passAwal);
+    $check('terapkan_impor buat 2 akun', $t === 'success' && $jml === 2);
+    $rowsImpor = mysqli_fetch_all(mysqli_query($conn, "SELECT role, wajib_ganti_password, password FROM users WHERE email IN ('imp1_{$tag}@example.com','imp2_{$tag}@example.com')"), MYSQLI_ASSOC);
+    $check('terapkan_impor role mahasiswa + flag=1', count($rowsImpor) === 2 && $rowsImpor[0]['role'] === 'mahasiswa' && (int) $rowsImpor[0]['wajib_ganti_password'] === 1);
+    $check('terapkan_impor SATU hash sama untuk semua (lihat: hash identik)', $rowsImpor[0]['password'] === $rowsImpor[1]['password'] && password_verify($passAwal, $rowsImpor[0]['password']));
+
+    // Atomik: satu baris duplikat (race) -> tidak ada akun dibuat.
+    $usersBeforeRace = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users"))['c'];
+    $csvRace = "nim,nama,prodi,email\n"
+        . "R{$tag}A,Race A,Teknik Informatika,racea_{$tag}@example.com\n"
+        . "R{$tag}B,Race B,Teknik Informatika,imp1_{$tag}@example.com\n"; // email duplikat yg sudah ada
+    $prevRace = pratinjau_impor_csv($conn, $csvRace); // pratinjau mendeteksi duplikat -> valid kosong
+    // Paksa terapkan dgn data yang menabrak unique (simulasi race): pakai baris valid dari DB-hijau.
+    $paksa = [['baris' => 2, 'nim' => "R{$tag}A", 'nama' => 'Race A', 'prodi' => 'Teknik Informatika', 'email' => "imp1_{$tag}@example.com"]];
+    [$t, $msg, $jml2] = terapkan_impor($conn, $paksa, $passAwal);
+    $usersAfterRace = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users"))['c'];
+    $check('terapkan_impor atomik saat duplikasi (0 akun baru)', $t === 'danger' && $jml2 === 0 && $usersAfterRace === $usersBeforeRace);
+
+    // Password awal tidak valid / terlalu panjang.
+    [, , $jml3] = terapkan_impor($conn, $prev['valid'], 'pendek');
+    $check('terapkan_impor tolak password awal < 8', $jml3 === 0);
+    [$t, , $jml4] = terapkan_impor($conn, $prev['valid'], str_repeat('x', 73));
+    $check('terapkan_impor tolak password > 72 byte', $t === 'danger' && $jml4 === 0);
+
+    // Password awal tidak tersimpan apa adanya di DB (hash), dan tak ada di sesi.
+    $cekPlain = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users WHERE password = '" . mysqli_real_escape_string($conn, $passAwal) . "'"))['c'];
+    $check('password awal tidak tersimpan sebagai teks asli', $cekPlain === 0);
+    $check('password awal tidak ada di $_SESSION', !in_array($passAwal, array_map('strval', $_SESSION ?? []), true));
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";

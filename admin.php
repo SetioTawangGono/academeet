@@ -632,6 +632,76 @@ if (isset($_POST['hapus_panitia'])) {
     flash_set($type, $message);
     redirect('admin.php?page=panitia');
 }
+
+// ==========================================
+// IMPOR MAHASISWA CSV (HANYA admin) — LANGKAH 1: PRATINJAU (tanpa tulis DB)
+// ==========================================
+if (isset($_POST['impor_pratinjau'])) {
+    csrf_check();
+    if ($role_aktif !== 'admin') {
+        http_response_code(403);
+        exit('Akses ditolak.');
+    }
+    $hasil = null;
+    $pesan = '';
+    try {
+        $berkas = $_FILES['csv'] ?? null;
+        if (!$berkas || !isset($berkas['tmp_name']) || !is_uploaded_file($berkas['tmp_name'])) {
+            throw new RuntimeException('Pilih berkas CSV untuk diunggah.');
+        }
+        if ((int) $berkas['size'] > 1024 * 1024) {
+            throw new RuntimeException('Ukuran berkas maksimal 1 MB.');
+        }
+        $isi = (string) file_get_contents($berkas['tmp_name']);
+        $hasil = pratinjau_impor_csv($conn, $isi);
+
+        // Bersihkan token pratinjau lama.
+        unset($_SESSION['impor_token'], $_SESSION['impor_valid'], $_SESSION['impor_kedaluwarsa']);
+
+        if ($hasil['valid'] !== [] && $hasil['kesalahan'] === []) {
+            // Hanya simpan bila BERSIH total: all-or-nothing pada baris valid.
+            $_SESSION['impor_valid'] = $hasil['valid'];
+            $_SESSION['impor_token'] = bin2hex(random_bytes(16));
+            $_SESSION['impor_kedaluwarsa'] = time() + 900;
+            $pesan = count($hasil['valid']) . ' baris siap diimpor. Konfirmasi untuk membuat akun.';
+        } elseif ($hasil['valid'] === [] && $hasil['kesalahan'] === []) {
+            $pesan = 'Tidak ada baris data pada berkas.';
+        } else {
+            $pesan = count($hasil['kesalahan']) . ' kesalahan ditemukan. Perbaiki berkas lalu unggah ulang (tidak ada akun dibuat).';
+        }
+    } catch (Throwable $ex) {
+        $pesan = $ex->getMessage();
+    }
+    $_SESSION['_old']['impor_pesan'] = $pesan;
+    redirect('admin.php?page=impor_mahasiswa');
+}
+
+// ==========================================
+// IMPOR MAHASISWA CSV — LANGKAH 2: TERAPKAN (token sekali pakai)
+// ==========================================
+if (isset($_POST['impor_terapkan'])) {
+    csrf_check();
+    if ($role_aktif !== 'admin') {
+        http_response_code(403);
+        exit('Akses ditolak.');
+    }
+    $tokenPost = (string) ($_POST['impor_token'] ?? '');
+    $tokenSesi = (string) ($_SESSION['impor_token'] ?? '');
+    $valid = $_SESSION['impor_valid'] ?? null;
+    $kedaluwarsa = (int) ($_SESSION['impor_kedaluwarsa'] ?? 0);
+
+    // Pakai-token: hapus dari sesi apa pun hasilnya (sekali pakai).
+    unset($_SESSION['impor_token'], $_SESSION['impor_valid'], $_SESSION['impor_kedaluwarsa']);
+
+    if ($tokenSesi === '' || !hash_equals($tokenSesi, $tokenPost) || !is_array($valid) || time() > $kedaluwarsa) {
+        flash_set('danger', 'Sesi pratinjau tidak berlaku lagi. Unggah ulang berkas.');
+        redirect('admin.php?page=impor_mahasiswa');
+    }
+    $passwordAwal = (string) ($_POST['password_awal'] ?? '');
+    [$type, $message, ] = terapkan_impor($conn, $valid, $passwordAwal);
+    flash_set($type, $message);
+    redirect('admin.php?page=impor_mahasiswa');
+}
 ?>
 
 <!DOCTYPE html>
@@ -1488,6 +1558,7 @@ if (isset($_POST['hapus_panitia'])) {
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Data Mahasiswa Terdaftar</h6>
                         <div class="admin-toolbar">
+                        <a href="admin.php?page=impor_mahasiswa" class="btn btn-sm btn-primary fw-semibold"><i class="bi bi-file-earmark-arrow-up me-1"></i>Impor CSV</a>
                         <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 240px;" role="search">
                             <input type="hidden" name="page" value="mahasiswa">
                             <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
@@ -2520,6 +2591,92 @@ if (isset($_POST['hapus_panitia'])) {
                         });
                     })();
                 </script>
+            <?php
+            // ---------------------------------------------------------
+            // MENU 9: IMPOR MAHASISWA CSV (HANYA admin)
+            // ---------------------------------------------------------
+            } elseif ($page == 'impor_mahasiswa') {
+                $pesan_impor = (string) ($_SESSION['_old']['impor_pesan'] ?? '');
+                $token_pratinjau = (string) ($_SESSION['impor_token'] ?? '');
+                $valid_pratinjau = $_SESSION['impor_valid'] ?? null;
+                $kedaluwarsa_pratinjau = (int) ($_SESSION['impor_kedaluwarsa'] ?? 0);
+                $siap_terapkan = ($token_pratinjau !== '' && is_array($valid_pratinjau) && time() <= $kedaluwarsa_pratinjau);
+            ?>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="card card-custom card-static">
+                            <div class="card-header bg-white border-bottom py-3 px-4">
+                                <h6 class="fw-bold mb-0 text-dark">Impor Data Mahasiswa (CSV)</h6>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($pesan_impor !== ''): ?>
+                                    <div class="alert alert-info border-0 rounded-3 small" role="alert"><i class="bi bi-info-circle-fill me-2"></i><?= e($pesan_impor) ?></div>
+                                <?php endif; ?>
+
+                                <form method="POST" action="admin.php?page=impor_mahasiswa" enctype="multipart/form-data" class="mb-0">
+                                    <?= csrf_field() ?>
+                                    <div class="mb-3">
+                                        <label for="csv_file" class="form-label small fw-semibold text-secondary">Berkas CSV</label>
+                                        <input type="file" name="csv" id="csv_file" class="form-control" accept=".csv,text/csv" required>
+                                        <small class="text-muted">Header wajib: nim, nama, prodi, email (urutan bebas). Maks 1 MB / 500 baris.</small>
+                                    </div>
+                                    <button type="submit" name="impor_pratinjau" class="btn btn-primary fw-semibold"><i class="bi bi-search me-1"></i>Pratinjau</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card card-custom card-static">
+                            <div class="card-header bg-white border-bottom py-3 px-4">
+                                <h6 class="fw-bold mb-0 text-dark">Format Berkas</h6>
+                            </div>
+                            <div class="card-body">
+                                <pre class="small bg-light rounded-3 p-3 mb-3">nim,nama,prodi,email
+2210012345,Budi Santoso,Teknik Informatika,budi@example.com</pre>
+                                <ul class="small text-muted mb-0 ps-3">
+                                    <li>Pemisah koma atau titik-koma.</li>
+                                    <li>Program studi harus dikenali sistem.</li>
+                                    <li>NIM &amp; email tidak boleh duplikat (di dalam file maupun di sistem).</li>
+                                    <li>Pratinjau tidak mengubah data. Akun dibuat hanya setelah konfirmasi.</li>
+                                    <li>Jika ada satu kesalahan, tidak ada akun yang dibuat (all-or-nothing).</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <?php if ($siap_terapkan): ?>
+                <div class="card card-custom card-static mt-3">
+                    <div class="card-header bg-white border-bottom py-3 px-4">
+                        <h6 class="fw-bold mb-0 text-dark">Konfirmasi Impor — <?= count($valid_pratinjau) ?> baris valid</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light"><tr><th scope="col">Baris</th><th scope="col">NIM</th><th scope="col">Nama</th><th scope="col">Prodi</th><th scope="col">Email</th></tr></thead>
+                                <tbody>
+                                    <?php foreach (array_slice($valid_pratinjau, 0, 10) as $r): ?>
+                                        <tr><td class="text-muted"><?= (int) $r['baris'] ?></td><td><?= e($r['nim']) ?></td><td class="fw-semibold text-dark"><?= e($r['nama']) ?></td><td class="text-muted small"><?= e($r['prodi']) ?></td><td class="text-muted small"><?= e($r['email']) ?></td></tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <?php if (count($valid_pratinjau) > 10): ?><p class="text-muted small">+ <?= count($valid_pratinjau) - 10 ?> baris lainnya.</p><?php endif; ?>
+                        <form method="POST" action="admin.php?page=impor_mahasiswa" class="row g-2 align-items-end m-0">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="impor_token" value="<?= e($token_pratinjau) ?>">
+                            <div class="col-sm-6">
+                                <label for="password_awal" class="form-label small fw-semibold text-secondary">Password Awal (untuk semua akun)</label>
+                                <input type="password" name="password_awal" id="password_awal" class="form-control" minlength="8" autocomplete="new-password" required>
+                                <small class="text-muted">Minimal 8 karakter. Mahasiswa wajib menggantinya saat login pertama.</small>
+                            </div>
+                            <div class="col-sm-6">
+                                <button type="submit" name="impor_terapkan" class="btn btn-success fw-semibold"><i class="bi bi-check2-circle me-1"></i>Buat <?= count($valid_pratinjau) ?> Akun</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <?php endif; ?>
             <?php
             }
             // Nilai isian lama hanya dipakai saat render form; bersihkan agar tidak bocor ke form lain.

@@ -905,3 +905,107 @@ function ganti_password_wajib(mysqli $conn, int $idUser, string $role, string $p
     mysqli_stmt_close($stmt);
     return ['success', 'Password berhasil diganti.'];
 }
+
+/**
+ * Pratinjau impor CSV (READ-ONLY). Parse + validasi baris (murni) + cek duplikat
+ * terhadap DB (NIM & email case-insensitive) dalam batch <= 200. Tidak menulis apa pun.
+ * Mengembalikan ['valid'=>[['baris','nim','nama','prodi','email'],...],
+ *                   'kesalahan'=>[['baris','kolom','alasan'],...]].
+ */
+function pratinjau_impor_csv(mysqli $conn, string $isi): array
+{
+    [$baris, $kesalahan] = parse_csv_mahasiswa($isi);
+    [$siap, $err2] = validasi_baris_impor($baris, prodi_terdaftar());
+    $kesalahan = array_merge($kesalahan, $err2);
+
+    if ($siap !== []) {
+        $nimAda = [];
+        $emailAda = [];
+        foreach (array_chunk($siap, 200) as $chunk) {
+            $nims = array_column($chunk, 'nim');
+            $emails = array_map(static fn($r) => strtolower((string) $r['email']), $chunk);
+
+            $ph = implode(',', array_fill(0, count($nims), '?'));
+            $stmt = mysqli_prepare($conn, "SELECT LOWER(nim) AS n FROM users WHERE LOWER(nim) IN ($ph)");
+            mysqli_stmt_bind_param($stmt, str_repeat('s', count($nims)), ...$nims);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            while ($r = mysqli_fetch_assoc($res)) { $nimAda[$r['n']] = true; }
+            mysqli_stmt_close($stmt);
+
+            $ph2 = implode(',', array_fill(0, count($emails), '?'));
+            $stmt = mysqli_prepare($conn, "SELECT LOWER(email) AS e FROM users WHERE LOWER(email) IN ($ph2)");
+            mysqli_stmt_bind_param($stmt, str_repeat('s', count($emails)), ...$emails);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            while ($r = mysqli_fetch_assoc($res)) { $emailAda[$r['e']] = true; }
+            mysqli_stmt_close($stmt);
+        }
+        $bersih = [];
+        foreach ($siap as $r) {
+            if (isset($nimAda[strtolower($r['nim'])])) {
+                $kesalahan[] = ['baris' => $r['baris'], 'kolom' => 'nim', 'alasan' => 'NIM sudah terdaftar di sistem.'];
+                continue;
+            }
+            if (isset($emailAda[strtolower($r['email'])])) {
+                $kesalahan[] = ['baris' => $r['baris'], 'kolom' => 'email', 'alasan' => 'Email sudah terdaftar di sistem.'];
+                continue;
+            }
+            $bersih[] = $r;
+        }
+        $siap = $bersih;
+    }
+
+    usort($kesalahan, static fn($a, $b) => ($a['baris'] ?? 0) <=> ($b['baris'] ?? 0));
+    return ['valid' => $siap, 'kesalahan' => $kesalahan];
+}
+
+/**
+ * Terapkan impor: buat akun mahasiswa dari baris valid dalam SATU transaksi.
+ * Satu password_hash dihitung SEKALI untuk semua baris (500 bcrypt terlalu lambat).
+ * $barisValid: dari pratinjau (['baris','nim','nama','prodi','email']).
+ * Mengembalikan ['success'|'danger', pesan, int jumlah].
+ */
+function terapkan_impor(mysqli $conn, array $barisValid, string $passwordAwal): array
+{
+    if ($barisValid === []) {
+        return ['danger', 'Tidak ada baris valid untuk diimpor.', 0];
+    }
+    if (strlen($passwordAwal) > password_max_bytes()) {
+        return ['danger', 'Password terlalu panjang (maksimal 72 byte).', 0];
+    }
+    if (!password_ok_untuk_role('mahasiswa', $passwordAwal)) {
+        return ['danger', 'Password awal minimal 8 karakter.', 0];
+    }
+
+    $hash = password_hash($passwordAwal, PASSWORD_DEFAULT);
+    $role = 'mahasiswa';
+
+    if (!mysqli_begin_transaction($conn)) {
+        return ['danger', 'Gagal memulai transaksi.', 0];
+    }
+    $jumlah = 0;
+    try {
+        $stmt = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, nim, prodi, email, password, role, wajib_ganti_password) VALUES (?, ?, ?, ?, ?, ?, 1)");
+        foreach ($barisValid as $r) {
+            $nama = (string) $r['nama'];
+            $nim = (string) $r['nim'];
+            $prodi = (string) $r['prodi'];
+            $email = (string) $r['email'];
+            mysqli_stmt_bind_param($stmt, 'ssssss', $nama, $nim, $prodi, $email, $hash, $role);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('INSERT:' . mysqli_errno($conn));
+            }
+            $jumlah++;
+        }
+        mysqli_stmt_close($stmt);
+        mysqli_commit($conn);
+        return ['success', $jumlah . ' akun dibuat.', $jumlah];
+    } catch (Throwable $ex) {
+        mysqli_rollback($conn);
+        $pesan = str_contains($ex->getMessage(), 'INSERT:1062')
+            ? 'Terjadi duplikasi saat menulis, tidak ada akun yang dibuat. Unggah ulang.'
+            : 'Gagal membuat akun. Tidak ada akun yang dibuat.';
+        return ['danger', $pesan, 0];
+    }
+}
