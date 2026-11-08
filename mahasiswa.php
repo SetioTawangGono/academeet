@@ -558,6 +558,11 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                                     <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i> Buka tautan
                                 </a>
                             <?php endif; ?>
+                            <?php if (($t['status_seminar'] ?? '') === 'Aktif' && !$is_h): ?>
+                                <a href="kalender.php?id=<?= (int) $t['id_registrasi'] ?>" class="btn btn-sm btn-light border fw-semibold rounded-pill mt-2">
+                                    <i class="bi bi-calendar-plus me-1" aria-hidden="true"></i> Tambah ke kalender
+                                </a>
+                            <?php endif; ?>
                         </div>
                         <div class="bg-light p-4 rounded-4 text-center border dashed-border position-relative">
                             <div class="position-absolute ticket-notch ticket-notch--left rounded-circle" style="width: 20px; height: 20px; left: -10px; top: 50%; margin-top: -10px;"></div>

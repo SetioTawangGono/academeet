@@ -367,3 +367,25 @@ function pakai_token_reset(mysqli $conn, string $token, string $passwordBaru): a
         return ['danger', $pesan];
     }
 }
+
+/**
+ * Ambil data satu registrasi milik user untuk pembuatan ICS.
+ * Owner-only: baris harus milik $idUser, jika tidak → null.
+ * Kolom detail opsional dipakai bila ada (Paket C).
+ */
+function ambil_data_ics(mysqli $conn, int $idUser, int $idRegistrasi): ?array
+{
+    if ($idUser <= 0 || $idRegistrasi <= 0) {
+        return null;
+    }
+    // Kolom detail seminar hanya ada sejak Paket C; fallback bila belum dimigrasi.
+    $stmt = mysqli_prepare($conn, "SELECT r.id_registrasi, r.kode_tiket, s.judul, s.pemateri, s.tanggal,
+            s.jam_mulai, s.jam_selesai, s.lokasi, s.link_online, s.kategori, s.deskripsi
+        FROM registrations r JOIN seminars s ON r.id_seminar = s.id_seminar
+        WHERE r.id_registrasi = ? AND r.id_user = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'ii', $idRegistrasi, $idUser);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    return $row ?: null;
+}
