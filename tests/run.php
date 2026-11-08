@@ -341,6 +341,20 @@ if (extension_loaded('gd') && function_exists('imagecreatefromjpeg')) {
     echo "skip: resize_image_file() (ekstensi GD tidak tersedia)\n";
 }
 
+// normalisasi_jam(): murni; HH:MM atau HH:MM:SS -> HH:MM, invalid -> null.
+$check('normalisasi_jam("09:00")="09:00"', normalisasi_jam('09:00') === '09:00');
+$check('normalisasi_jam("09:00:00")="09:00"', normalisasi_jam('09:00:00') === '09:00');
+$check('normalisasi_jam(" 09:00 ")="09:00" (spasi dipangkas)', normalisasi_jam(' 09:00 ') === '09:00');
+$check('normalisasi_jam("23:59")="23:59"', normalisasi_jam('23:59') === '23:59');
+$check('normalisasi_jam("00:00")="00:00"', normalisasi_jam('00:00') === '00:00');
+$check('normalisasi_jam("9:00")=null', normalisasi_jam('9:00') === null);
+$check('normalisasi_jam("24:00")=null', normalisasi_jam('24:00') === null);
+$check('normalisasi_jam("09:60")=null', normalisasi_jam('09:60') === null);
+$check('normalisasi_jam("09:00:60")=null', normalisasi_jam('09:00:60') === null);
+$check('normalisasi_jam("09:00:00:00")=null', normalisasi_jam('09:00:00:00') === null);
+$check('normalisasi_jam("abc")=null', normalisasi_jam('abc') === null);
+$check('normalisasi_jam("")=null', normalisasi_jam('') === null);
+
 // 1. kategori_seminar()
 $kats = kategori_seminar();
 $check('kategori_seminar() memuat 6 nilai', count($kats) === 6 && $kats === ['Teknologi', 'Karier', 'Riset', 'Soft Skill', 'Kewirausahaan', 'Umum']);
@@ -360,6 +374,9 @@ $check('validasi_detail_seminar jam_selesai == jam_mulai ditolak', $errJamS2 !==
 $check('validasi_detail_seminar jam_selesai < jam_mulai ditolak', $errJamS3 !== '');
 [$errJamOk, $dataJamOk] = validasi_detail_seminar(['jam_mulai' => '08:00', 'jam_selesai' => '10:00']);
 $check('validasi_detail_seminar 08:00+10:00 diterima', $errJamOk === '' && $dataJamOk['jam_mulai'] === '08:00:00' && $dataJamOk['jam_selesai'] === '10:00:00');
+// Regresi akar bug: nilai round-trip HH:MM:SS dari DB harus tetap diterima apa adanya.
+[$errJamSs, $dataJamSs] = validasi_detail_seminar(['jam_mulai' => '09:00:00', 'jam_selesai' => '11:00:00']);
+$check('validasi_detail_seminar jam HH:MM:SS diterima utuh', $errJamSs === '' && $dataJamSs['jam_mulai'] === '09:00:00' && $dataJamSs['jam_selesai'] === '11:00:00');
 [$errLok] = validasi_detail_seminar(['lokasi' => str_repeat('a', 151)]);
 $check('validasi_detail_seminar lokasi 151 karakter ditolak', $errLok !== '');
 [$errDesk1] = validasi_detail_seminar(['deskripsi' => str_repeat('a', 2001)]);

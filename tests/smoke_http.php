@@ -97,6 +97,62 @@ $logout = static function () use ($http, $base, $jar): void {
     // Hapus cookie jar agar sesi bersih antar peran.
     @unlink($jar);
 };
+// Ekstrak semua field input/select/textarea dari sebuah <form> (action contains) menjadi array name=>value.
+$ekstrakForm = static function (string $html, string $cocokAction): ?array {
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML($html);
+    libxml_clear_errors();
+    $xp = new DOMXPath($doc);
+    foreach ($xp->query('//form') as $form) {
+        $action = $form->getAttribute('action');
+        if (!str_contains($action, $cocokAction)) continue;
+        $data = [];
+        foreach ($xp->query('.//input|.//select|.//textarea|.//button[@name]', $form) as $el) {
+            $name = $el->getAttribute('name');
+            if ($name === '' || strtolower($el->getAttribute('type')) === 'file') continue;
+            if ($el->nodeName === 'select') {
+                $val = '';
+                foreach ($xp->query('.//option[@selected]', $el) as $op) $val = $op->getAttribute('value');
+                $data[$name] = $val;
+            } elseif ($el->nodeName === 'textarea') {
+                $data[$name] = $el->textContent;
+            } else {
+                $data[$name] = $el->getAttribute('value');
+            }
+        }
+        return $data;
+    }
+    return null;
+};
+// Ekstrak field form INDUK dari elemen apa pun yang ber-name=$namaAksi (hidden input / tombol submit).
+$ekstrakFormAksi = static function (string $html, string $namaAksi): ?array {
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML($html);
+    libxml_clear_errors();
+    $xp = new DOMXPath($doc);
+    $targets = $xp->query('//*[@name="' . $namaAksi . '"]');
+    if ($targets->length === 0) return null;
+    $form = $targets->item(0)->parentNode;
+    while ($form !== null && $form->nodeName !== 'form') $form = $form->parentNode;
+    if ($form === null) return null;
+    $data = [];
+    foreach ($xp->query('.//input|.//select|.//textarea|.//button[@name]', $form) as $el) {
+        $name = $el->getAttribute('name');
+        if ($name === '' || strtolower($el->getAttribute('type')) === 'file') continue;
+        if ($el->nodeName === 'select') {
+            $val = '';
+            foreach ($xp->query('.//option[@selected]', $el) as $op) $val = $op->getAttribute('value');
+            $data[$name] = $val;
+        } elseif ($el->nodeName === 'textarea') {
+            $data[$name] = $el->textContent;
+        } else {
+            $data[$name] = $el->getAttribute('value');
+        }
+    }
+    return $data;
+};
 
 try {
     // Tunggu server siap.
@@ -149,6 +205,21 @@ try {
     $idSeminar = (int) mysqli_insert_id($conn);
     mysqli_stmt_close($sem);
     $check('setup seminar uji hari ini', $idSeminar > 0);
+
+    // Seminar uji khusus regresi jam: satu berjam (HH:MM:SS), satu tanpa jam.
+    $semJam = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, kategori, deskripsi, kuota, kuota_total, status) VALUES (?, ?, 'Pemateri Smoke', ?, '09:00:00', '11:00:00', 'Ruang Jam', 'Umum', 'Uji jam', 10, 10, 'Aktif')");
+    $judulSemJam = "Seminar Jam {$tag}";
+    mysqli_stmt_bind_param($semJam, 'sis', $judulSemJam, $idPemateri, $hariIni);
+    mysqli_stmt_execute($semJam);
+    $idSemJam = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($semJam);
+    $semKosong = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, kategori, deskripsi, kuota, kuota_total, status) VALUES (?, ?, 'Pemateri Smoke', ?, NULL, NULL, 'Ruang Kosong', 'Umum', 'Uji tanpa jam', 10, 10, 'Aktif')");
+    $judulSemKosong = "Seminar Tanpa Jam {$tag}";
+    mysqli_stmt_bind_param($semKosong, 'sis', $judulSemKosong, $idPemateri, $hariIni);
+    mysqli_stmt_execute($semKosong);
+    $idSemKosong = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($semKosong);
+    $check('setup seminar uji jam & tanpa jam', $idSemJam > 0 && $idSemKosong > 0);
 
     // ============================================================
     // ADMIN
@@ -267,6 +338,99 @@ try {
     $st = mysqli_fetch_assoc(mysqli_query($conn, "SELECT status_hadir FROM registrations WHERE id_registrasi = {$idReg}"));
     $check('ADMIN batalkan_checkin 302 & status Belum Hadir', $c === 302 && ($st['status_hadir'] ?? '') === 'Belum Hadir');
 
+    // ---------- B1. UJI KIRIM-ULANG TANPA PERUBAHAN (regresi jam) ----------
+    // Seminar berjam: form render HH:MM, POST apa adanya harus sukses & jam DB tetap HH:MM:SS.
+    $snapSebelum = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jam_mulai, jam_selesai FROM seminars WHERE id_seminar = {$idSemJam}"));
+    [$c, $b] = $http("{$base}/admin.php?page=edit_seminar&id={$idSemJam}");
+    $fieldsJam = $ekstrakForm($b, 'edit_seminar&id=' . $idSemJam);
+    $check('B1 form edit_seminar berjam ter-ekstrak', is_array($fieldsJam));
+    $check('B1 jam_mulai ter-render HH:MM', ($fieldsJam['jam_mulai'] ?? null) === '09:00' && ($fieldsJam['jam_selesai'] ?? null) === '11:00');
+    $fieldsJam['_csrf'] = (string) $ambilCsrf($b);
+    [$c, $b, $h] = $http("{$base}/admin.php?page=edit_seminar&id={$idSemJam}", [
+        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fieldsJam,
+    ]);
+    $snapSesudah = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jam_mulai, jam_selesai FROM seminars WHERE id_seminar = {$idSemJam}"));
+    $check('B1 kirim-ulang berjam 302 sukses (Location dashboard)', $c === 302 && str_contains($h, 'dashboard'));
+    $check('B1 kirim-ulang berjam tak balik ke edit (bukan error)', $c === 302 && !str_contains($h, 'edit_seminar'));
+    $check('B1 jam DB tetap 09:00:00/11:00:00', $snapSebelum === $snapSesudah && ($snapSesudah['jam_mulai'] ?? '') === '09:00:00' && ($snapSesudah['jam_selesai'] ?? '') === '11:00:00');
+    // Ikuti redirect: pastikan flash sukses, bukan "tidak valid".
+    [$c, $b] = $http("{$base}/admin.php?page=dashboard");
+    $check('B1 ikuti redirect: flash sukses tanpa "tidak valid"', str_contains($b, 'alert-success') && !str_contains($b, 'tidak valid'));
+
+    // Seminar TANPA jam: form render kosong, POST apa adanya tetap sukses & DB tetap NULL.
+    [$c, $b] = $http("{$base}/admin.php?page=edit_seminar&id={$idSemKosong}");
+    $fieldsKosong = $ekstrakForm($b, 'edit_seminar&id=' . $idSemKosong);
+    $check('B1 form edit_seminar tanpa jam ter-ekstrak', is_array($fieldsKosong));
+    $check('B1 jam_mulai kosong ter-render', ($fieldsKosong['jam_mulai'] ?? 'x') === '' && ($fieldsKosong['jam_selesai'] ?? 'x') === '');
+    $fieldsKosong['_csrf'] = (string) $ambilCsrf($b);
+    [$c, $b, $h] = $http("{$base}/admin.php?page=edit_seminar&id={$idSemKosong}", [
+        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fieldsKosong,
+    ]);
+    $rowKosong = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jam_mulai, jam_selesai FROM seminars WHERE id_seminar = {$idSemKosong}"));
+    $check('B1 kirim-ulang tanpa jam 302 sukses (Location dashboard)', $c === 302 && str_contains($h, 'dashboard'));
+    $check('B1 jam DB tetap NULL', array_key_exists('jam_mulai', $rowKosong) && $rowKosong['jam_mulai'] === null && $rowKosong['jam_selesai'] === null);
+
+    // ---------- B2. UJI DOM STATIS halaman peserta ----------
+    $regHadir = mysqli_prepare($conn, "INSERT INTO registrations (id_user, id_seminar, kode_tiket, status_hadir, checkin_at) VALUES (?, ?, ?, 'Hadir', NOW())");
+    $kodeHadir = 'SMH' . strtoupper($tag);
+    mysqli_stmt_bind_param($regHadir, 'iis', $idMhs, $idSemJam, $kodeHadir);
+    mysqli_stmt_execute($regHadir);
+    $idRegHadir = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($regHadir);
+    [$c, $b] = $http("{$base}/admin.php?page=peserta&id={$idSemJam}");
+    $check('B2 halaman peserta 200 & bersih', $c === 200 && $tanpaError($b));
+    $domP = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $domP->loadHTML($b);
+    libxml_clear_errors();
+    $xpP = new DOMXPath($domP);
+    $idP = [];
+    foreach ($xpP->query('//*[@id]') as $el) { $idP[] = $el->getAttribute('id'); }
+    $check('B2 tidak ada id HTML duplikat', count($idP) === count(array_unique($idP)));
+    $targetOk = true;
+    foreach ($xpP->query('//*[@data-bs-target]') as $el) {
+        $tgt = $el->getAttribute('data-bs-target');
+        if (!str_starts_with($tgt, '#')) continue;
+        if ($xpP->query('//*[@id="' . substr($tgt, 1) . '"]')->length === 0) { $targetOk = false; break; }
+    }
+    $check('B2 setiap data-bs-target punya elemen id-nya', $targetOk);
+    // Setiap form POST area peserta wajib punya _csrf, aksi dikenal, dan id_registrasi.
+    $aksiDikenal = ['checkin_manual', 'batalkan_checkin'];
+    $formOk = true; $formKosong = 0;
+    foreach ($xpP->query('//form[@method="POST"]') as $form) {
+        if (!str_contains($form->getAttribute('action'), 'page=peserta')) continue;
+        $formKosong++;
+        $punyaCsrf = $xpP->query('.//input[@name="_csrf"]', $form)->length > 0;
+        $punyaReg = $xpP->query('.//*[@name="id_registrasi"]', $form)->length > 0;
+        $punyaAksi = false;
+        foreach ($aksiDikenal as $ak) {
+            if ($xpP->query('.//*[@name="' . $ak . '"]', $form)->length > 0) { $punyaAksi = true; break; }
+        }
+        if (!$punyaCsrf || !$punyaReg || !$punyaAksi) { $formOk = false; }
+    }
+    $check('B2 form POST peserta: _csrf + aksi + id_registrasi', $formKosong > 0 && $formOk);
+    $check('B2 tombol Batalkan tampil untuk baris Hadir', str_contains($b, 'js-batal-checkin') && str_contains($b, 'Batalkan'));
+
+    // ---------- B3. POST batalkan_checkin dari FORM HASIL PARSE ----------
+    $formBatal = $ekstrakFormAksi($b, 'batalkan_checkin');
+    $check('B3 form batalkan_checkin ter-ekstrak', is_array($formBatal));
+    $check('B3 form parse memuat _csrf+aksi+id_seminar', ($formBatal['_csrf'] ?? '') !== '' && array_key_exists('batalkan_checkin', $formBatal ?? []) && (string) ($formBatal['id_seminar'] ?? '') === (string) $idSemJam);
+    // Input id_registrasi di modal kosong (diisi JS); ambil nilainya dari tombol .js-batal-checkin.
+    if (($formBatal['id_registrasi'] ?? '') === '') {
+        foreach ($xpP->query('//*[contains(@class,"js-batal-checkin")]') as $btn) {
+            if ((string) $btn->getAttribute('data-id') === (string) $idRegHadir) { $formBatal['id_registrasi'] = (string) $idRegHadir; break; }
+        }
+    }
+    $check('B3 id_registrasi terisi dari data-id tombol', (string) ($formBatal['id_registrasi'] ?? '') === (string) $idRegHadir);
+    [$c, $b, $h] = $http("{$base}/admin.php?page=peserta&id={$idSemJam}", [
+        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $formBatal,
+    ]);
+    $rowBatal = mysqli_fetch_assoc(mysqli_query($conn, "SELECT status_hadir, checkin_at FROM registrations WHERE id_registrasi = {$idRegHadir}"));
+    $check('B3 batalkan dari form parse 302', $c === 302);
+    $check('B3 status Belum Hadir & checkin_at NULL', ($rowBatal['status_hadir'] ?? '') === 'Belum Hadir' && array_key_exists('checkin_at', $rowBatal) && $rowBatal['checkin_at'] === null);
+    [$c, $b] = $http("{$base}/admin.php?page=peserta&id={$idSemJam}");
+    $check('B3 flash batalkan tampil (alert sukses)', str_contains($b, 'alert') && (str_contains($b, 'dibatalkan') || str_contains($b, 'alert-success')));
+
     // Panitia: buat / reset / hapus.
     [$c, $b] = $http("{$base}/admin.php?page=panitia");
     $tokPan = (string) $ambilCsrf($b);
@@ -315,6 +479,22 @@ try {
     $check('PANITIA scan 200 & bersih', $c === 200 && $tanpaError($b));
     [$c, $b] = $http("{$base}/admin.php?page=peserta&id={$idSeminar}");
     $check('PANITIA peserta 200 & bersih', $c === 200 && $tanpaError($b));
+    // B4: panitia TIDAK melihat tombol Batalkan walau ada baris Hadir.
+    $emailMhsP = "smk_mhsp_{$tag}@example.com";
+    $insP = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, email, password, role) VALUES ('Mhs Panitia Smoke', ?, ?, 'mahasiswa')");
+    $hashP = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+    mysqli_stmt_bind_param($insP, 'ss', $emailMhsP, $hashP);
+    mysqli_stmt_execute($insP);
+    $idMhsB4 = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($insP);
+    $regHadirP = mysqli_prepare($conn, "INSERT INTO registrations (id_user, id_seminar, kode_tiket, status_hadir, checkin_at) VALUES (?, ?, ?, 'Hadir', NOW())");
+    $kodeHadirP = 'SMP' . strtoupper($tag);
+    mysqli_stmt_bind_param($regHadirP, 'iis', $idMhsB4, $idSemJam, $kodeHadirP);
+    mysqli_stmt_execute($regHadirP);
+    mysqli_stmt_close($regHadirP);
+    [$c, $b] = $http("{$base}/admin.php?page=peserta&id={$idSemJam}");
+    $check('B4 panitia peserta 200', $c === 200);
+    $check('B4 panitia TIDAK melihat tombol Batalkan', !str_contains($b, 'js-batal-checkin') && !str_contains($b, 'modalBatalCheckin'));
     [$c, $b] = $http("{$base}/admin.php?page=mahasiswa");
     $check('PANITIA halaman admin-only 403', $c === 403);
     [$c, $b] = $http("{$base}/admin.php?page=peserta&id={$idSeminar}", [
