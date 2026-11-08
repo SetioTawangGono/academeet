@@ -938,6 +938,12 @@ html:not([data-bs-theme="dark"]) .filter-bar .input-group-text {
     background-color: rgba(255, 255, 255, .06);
 }
 
+/* Tabel native (thead.table-light) ikut gelap di mode gelap; mode terang tak tersentuh. */
+[data-bs-theme="dark"] .table:not(.table-custom) thead.table-light th {
+    background-color: rgba(255, 255, 255, .05);
+    color: var(--text-main);
+}
+
 /* Hormati preferensi pengguna yang mengurangi gerakan. */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
