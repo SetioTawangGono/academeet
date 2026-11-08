@@ -1232,11 +1232,11 @@ if (isset($_POST['impor_terapkan'])) {
                                 </div>
                                 <div class="col-lg-3">
                                     <label for="jam_mulai" class="form-label small fw-semibold text-secondary">Jam Mulai</label>
-                                    <input type="time" class="form-control" id="jam_mulai" name="jam_mulai" value="<?= e(old('jam_mulai')) ?>">
+                                    <input type="time" class="form-control" id="jam_mulai" name="jam_mulai" value="<?= e(normalisasi_jam(old('jam_mulai')) ?? '') ?>">
                                 </div>
                                 <div class="col-lg-3">
                                     <label for="jam_selesai" class="form-label small fw-semibold text-secondary">Jam Selesai</label>
-                                    <input type="time" class="form-control" id="jam_selesai" name="jam_selesai" value="<?= e(old('jam_selesai')) ?>">
+                                    <input type="time" class="form-control" id="jam_selesai" name="jam_selesai" value="<?= e(normalisasi_jam(old('jam_selesai')) ?? '') ?>">
                                 </div>
                                 <div class="col-lg-6">
                                     <label for="kategori" class="form-label small fw-semibold text-secondary">Kategori</label>
@@ -1300,8 +1300,8 @@ if (isset($_POST['impor_terapkan'])) {
                     redirect('admin.php?page=dashboard');
                 }
                 $pendaftar_edit = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $id_edit"))['c'];
-                $jam_mulai_edit = substr((string) ($sem_edit['jam_mulai'] ?? ''), 0, 5);
-                $jam_selesai_edit = substr((string) ($sem_edit['jam_selesai'] ?? ''), 0, 5);
+                $jam_mulai_edit = normalisasi_jam((string) ($sem_edit['jam_mulai'] ?? '')) ?? '';
+                $jam_selesai_edit = normalisasi_jam((string) ($sem_edit['jam_selesai'] ?? '')) ?? '';
                 $kategori_edit = (string) ($sem_edit['kategori'] ?? 'Umum');
             ?>
                 <div class="card card-custom mb-4">
@@ -1345,11 +1345,11 @@ if (isset($_POST['impor_terapkan'])) {
                                 </div>
                                 <div class="col-lg-3">
                                     <label for="jam_mulai" class="form-label small fw-semibold text-secondary">Jam Mulai</label>
-                                    <input type="time" class="form-control" id="jam_mulai" name="jam_mulai" value="<?= e(old('jam_mulai', $jam_mulai_edit)) ?>">
+                                    <input type="time" class="form-control" id="jam_mulai" name="jam_mulai" value="<?= e(normalisasi_jam(old('jam_mulai', $jam_mulai_edit)) ?? '') ?>">
                                 </div>
                                 <div class="col-lg-3">
                                     <label for="jam_selesai" class="form-label small fw-semibold text-secondary">Jam Selesai</label>
-                                    <input type="time" class="form-control" id="jam_selesai" name="jam_selesai" value="<?= e(old('jam_selesai', $jam_selesai_edit)) ?>">
+                                    <input type="time" class="form-control" id="jam_selesai" name="jam_selesai" value="<?= e(normalisasi_jam(old('jam_selesai', $jam_selesai_edit)) ?? '') ?>">
                                 </div>
                                 <div class="col-lg-6">
                                     <label for="kategori" class="form-label small fw-semibold text-secondary">Kategori</label>

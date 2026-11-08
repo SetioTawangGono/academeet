@@ -1069,6 +1069,29 @@ function validasi_link_online(string $url): bool
     return true;
 }
 
+/**
+ * Normalisasi jam ke "HH:MM".
+ * Menerima "HH:MM" atau "HH:MM:SS"; rentang HH 00-23, MM/SS 00-59; wajib 2 digit.
+ * Kosong atau format tidak valid -> null.
+ */
+function normalisasi_jam(string $nilai): ?string
+{
+    $nilai = trim($nilai);
+    if ($nilai === '') {
+        return null;
+    }
+    if (!preg_match('/^(\d{2}):(\d{2})(?::(\d{2}))?$/', $nilai, $m)) {
+        return null;
+    }
+    $hh = (int) $m[1];
+    $mm = (int) $m[2];
+    $ss = isset($m[3]) ? (int) $m[3] : 0;
+    if ($hh > 23 || $mm > 59 || $ss > 59) {
+        return null;
+    }
+    return sprintf('%02d:%02d', $hh, $mm);
+}
+
 /** Validasi detail seminar (murni, tanpa DB). */
 function validasi_detail_seminar(array $in): array
 {
@@ -1099,17 +1122,13 @@ function validasi_detail_seminar(array $in): array
         $jm = is_string($in['jam_mulai']) ? trim($in['jam_mulai']) : '';
         if ($jm === '') {
             $data['jam_mulai'] = null;
-        } elseif (preg_match('/^(\d{2}):(\d{2})$/', $jm, $m)) {
-            $hh = (int) $m[1];
-            $mm = (int) $m[2];
-            if ($hh < 0 || $hh > 23 || $mm < 0 || $mm > 59) {
+        } else {
+            $hasil = normalisasi_jam($jm);
+            if ($hasil === null) {
                 $error = 'Jam mulai tidak valid.';
                 return [$error, $data];
             }
-            $data['jam_mulai'] = sprintf('%02d:%02d:00', $hh, $mm);
-        } else {
-            $error = 'Jam mulai tidak valid.';
-            return [$error, $data];
+            $data['jam_mulai'] = sprintf('%s:00', $hasil);
         }
     }
 
@@ -1123,23 +1142,17 @@ function validasi_detail_seminar(array $in): array
                 $error = 'Jam selesai diisi tetapi jam mulai kosong.';
                 return [$error, $data];
             }
-            if (preg_match('/^(\d{2}):(\d{2})$/', $js, $m)) {
-                $hh = (int) $m[1];
-                $mm = (int) $m[2];
-                if ($hh < 0 || $hh > 23 || $mm < 0 || $mm > 59) {
-                    $error = 'Jam selesai tidak valid.';
-                    return [$error, $data];
-                }
-                $jamSelesaiStr = sprintf('%02d:%02d:00', $hh, $mm);
-                if ($jamSelesaiStr <= $data['jam_mulai']) {
-                    $error = 'Jam selesai harus lebih besar dari jam mulai.';
-                    return [$error, $data];
-                }
-                $data['jam_selesai'] = $jamSelesaiStr;
-            } else {
+            $hasil = normalisasi_jam($js);
+            if ($hasil === null) {
                 $error = 'Jam selesai tidak valid.';
                 return [$error, $data];
             }
+            $jamSelesaiStr = sprintf('%s:00', $hasil);
+            if ($jamSelesaiStr <= $data['jam_mulai']) {
+                $error = 'Jam selesai harus lebih besar dari jam mulai.';
+                return [$error, $data];
+            }
+            $data['jam_selesai'] = $jamSelesaiStr;
         }
     }
 
