@@ -2397,7 +2397,7 @@ if (isset($_POST['impor_terapkan'])) {
                     </div>
                 </div>
                 <script>
-                    (function () {
+                    document.addEventListener('DOMContentLoaded', function () {
                         var el = document.getElementById('modalBatalCheckin');
                         if (!el) return;
                         var modal = new bootstrap.Modal(el);
@@ -2408,7 +2408,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 modal.show();
                             });
                         });
-                    })();
+                    });
                 </script>
                 <?php endif; ?>
             <?php
@@ -2604,7 +2604,7 @@ if (isset($_POST['impor_terapkan'])) {
                     </div>
                 </div>
                 <script>
-                    (function () {
+                    document.addEventListener('DOMContentLoaded', function () {
                         var mr = document.getElementById('modalResetPanitia');
                         var mh = document.getElementById('modalHapusPanitia');
                         var modalReset = mr ? new bootstrap.Modal(mr) : null;
@@ -2623,7 +2623,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 if (modalHapus) modalHapus.show();
                             });
                         });
-                    })();
+                    });
                 </script>
             <?php
             // ---------------------------------------------------------
