@@ -1,7 +1,8 @@
 -- Migrasi untuk database academeet yang sudah berjalan.
--- Aman dijalankan berulang: index dicek dulu lewat information_schema.
--- Jalankan: mysql -u root academeet < migrasi.sql
-USE academeet;
+-- Aman dijalankan berulang: index/kolom dicek dulu lewat information_schema.
+-- Jalankan dengan menyebut database tujuan secara eksplisit (file ini TIDAK memilih database):
+--   mysql -u root academeet < migrasi.sql
+-- Tanpa nama database di baris perintah, MySQL akan gagal "No database selected".
 
 -- Samakan lebar kolom snapshot nama pemateri dengan tabel pemateri.
 ALTER TABLE seminars MODIFY pemateri VARCHAR(150) NOT NULL;
@@ -195,5 +196,50 @@ SET @exists := (SELECT COUNT(*) FROM information_schema.statistics
     WHERE table_schema = DATABASE() AND table_name = 'seminars' AND index_name = 'idx_seminars_kategori');
 SET @sql := IF(@exists = 0,
     'ALTER TABLE seminars ADD KEY idx_seminars_kategori (kategori)',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- =====================================================
+-- Paket D
+-- =====================================================
+
+-- Penanda pengingat H-1 sudah dikirim untuk sebuah registrasi (idempoten: dicek per kolom).
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'registrations' AND column_name = 'h1_terkirim_at');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE registrations ADD COLUMN h1_terkirim_at DATETIME NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Waktu pendaftaran (untuk grafik pendaftar per bulan). Baris lama dibiarkan NULL.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'registrations' AND column_name = 'created_at');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE registrations ADD COLUMN created_at DATETIME NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Default waktu otomatis HANYA lewat ALTER terpisah, agar baris lama tetap NULL (tidak di-backfill).
+-- information_schema menyimpan default NULL sebagai string 'NULL', bukan SQL NULL.
+SET @needs_default := (SELECT IF(COLUMN_DEFAULT IS NULL OR COLUMN_DEFAULT = 'NULL', 1, 0) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'registrations' AND column_name = 'created_at');
+SET @sql := IF(@needs_default = 1,
+    'ALTER TABLE registrations ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Preferensi notifikasi email pengingat (default aktif untuk semua user).
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'notif_email');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE users ADD COLUMN notif_email TINYINT(1) NOT NULL DEFAULT 1',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Waktu terakhir jadwal seminar diubah (tanda di tiket peserta).
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'jadwal_diubah_at');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN jadwal_diubah_at DATETIME NULL',
     'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
