@@ -519,6 +519,33 @@ function statistik_pendaftar_bulanan(mysqli $conn, int $bulan = 12): array
 }
 
 /**
+ * Pendaftar per HARI (agregat) untuk grafik area (F12 revisi). Read-only, satu query prepared.
+ * $mulai: tanggal awal 'Y-m-d' (dihitung di PHP, zona Asia/Jakarta). Mengembalikan list
+ * ['d'=>'Y-m-d', 'status_hadir'=>string, 'c'=>int] untuk created_at >= $mulai, GROUP BY hari+status.
+ * Baris created_at NULL tidak ikut (dihitung terpisah oleh pemanggil bila perlu).
+ */
+function statistik_pendaftar_harian(mysqli $conn, string $mulai): array
+{
+    $stmt = mysqli_prepare($conn, "SELECT DATE(created_at) AS d, status_hadir, COUNT(*) AS c
+        FROM registrations
+        WHERE created_at >= ?
+        GROUP BY d, status_hadir");
+    mysqli_stmt_bind_param($stmt, 's', $mulai);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $out = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $out[] = [
+            'd' => (string) $row['d'],
+            'status_hadir' => (string) $row['status_hadir'],
+            'c' => (int) $row['c'],
+        ];
+    }
+    mysqli_stmt_close($stmt);
+    return $out;
+}
+
+/**
  * Kirim email konfirmasi pendaftaran (best-effort). TIDAK pernah melempar / menggagalkan pendaftaran.
  * $sem: baris seminar (judul, pemateri, tanggal, jam_mulai, jam_selesai, lokasi).
  */

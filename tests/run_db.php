@@ -531,6 +531,52 @@ try {
     for ($i = 1; $i < count($kp); $i++) { if ($kp[$i]['terdaftar'] > $kp[$i-1]['terdaftar']) { $srt = false; } }
     $check('grafik populer: urut menurun', $srt);
 
+    // ===== F12 revisi: statistik_pendaftar_harian =====
+    // Buat user & seminar uji, lalu set created_at eksplisit (batas hari, NULL, di luar rentang).
+    $idSemH = ins_seminar($conn, 'PaketD Harian ' . $tag, $besok, 50);
+    $mulaiH = date('Y-m-d', strtotime('-89 day'));
+    $hariIniH = date('Y-m-d');
+    $kemarinH = date('Y-m-d', strtotime('-1 day'));
+    $ua = ins_user($conn, 'DH a ' . $tag, "dhra{$tag}@test.local");
+    $ub = ins_user($conn, 'DH b ' . $tag, "dhrb{$tag}@test.local");
+    $uc = ins_user($conn, 'DH c ' . $tag, "dhrc{$tag}@test.local");
+    $ud = ins_user($conn, 'DH d ' . $tag, "dhrd{$tag}@test.local");
+    $ue = ins_user($conn, 'DH e ' . $tag, "dhre{$tag}@test.local");
+    $ra = ins_reg($conn, $ua, $idSemH, 'Hadir', 'DH-' . $tag . '-a');
+    $rb = ins_reg($conn, $ub, $idSemH, 'Belum Hadir', 'DH-' . $tag . '-b');
+    $rc = ins_reg($conn, $uc, $idSemH, 'Hadir', 'DH-' . $tag . '-c');
+    $rd = ins_reg($conn, $ud, $idSemH, 'Belum Hadir', 'DH-' . $tag . '-d');
+    $re = ins_reg($conn, $ue, $idSemH, 'Hadir', 'DH-' . $tag . '-e');
+    // Batas hari: 00:00:00 dan 23:59:59 pada hari ini.
+    mysqli_query($conn, "UPDATE registrations SET created_at = '{$hariIniH} 00:00:00' WHERE id_registrasi = $ra");
+    mysqli_query($conn, "UPDATE registrations SET created_at = '{$hariIniH} 23:59:59' WHERE id_registrasi = $rb");
+    // Kemarin, Hadir.
+    mysqli_query($conn, "UPDATE registrations SET created_at = '{$kemarinH} 12:00:00' WHERE id_registrasi = $rc");
+    // NULL (dikecualikan dari seri).
+    mysqli_query($conn, "UPDATE registrations SET created_at = NULL WHERE id_registrasi = $rd");
+    // Di luar rentang (jauh sebelum $mulai).
+    $lamaH = date('Y-m-d', strtotime('-200 day'));
+    mysqli_query($conn, "UPDATE registrations SET created_at = '{$lamaH} 10:00:00' WHERE id_registrasi = $re");
+
+    $harian = statistik_pendaftar_harian($conn, $mulaiH . ' 00:00:00');
+    // Peta hasil untuk cek cepat.
+    $petaH = [];
+    foreach ($harian as $row) { $petaH[$row['d'] . '|' . $row['status_hadir']] = $row['c']; }
+    $check('harian: batas 00:00:00 & 23:59:59 hari ini (Hadir>=1, Belum>=1)', ($petaH[$hariIniH . '|Hadir'] ?? 0) >= 1 && ($petaH[$hariIniH . '|Belum Hadir'] ?? 0) >= 1);
+    $check('harian: kemarin Hadir>=1', ($petaH[$kemarinH . '|Hadir'] ?? 0) >= 1);
+    $check('harian: created_at NULL tak muncul', !isset($petaH['|Belum Hadir']) && !isset($petaH['|Hadir']));
+    $check('harian: di luar rentang (200 hari) tidak ikut', ($petaH[$lamaH . '|Hadir'] ?? 0) === 0);
+    $check('harian: semua baris punya status valid', (function () use ($harian) {
+        foreach ($harian as $row) { if (!in_array($row['status_hadir'], ['Hadir', 'Belum Hadir'], true)) { return false; } }
+        return true;
+    })());
+    // Param aneh tidak merusak (prepared): string injeksi -> tak melempar, hasil wajar.
+    $aneh = statistik_pendaftar_harian($conn, "2026-01-01' OR '1'='1");
+    $check('harian: param aneh aman (prepared)', is_array($aneh));
+    // Hitung catatan tanpa waktu (COUNT terpisah).
+    $tanpa = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE created_at IS NULL"))['c'];
+    $check('harian: catatan tanpa waktu >= 1', $tanpa >= 1);
+
     // ===== Paket D: hitung peserta terdampak (konfirmasi hapus) =====
     $jml = count([$regBesok, $regHadir, $regOff]); // 3 registrasi di seminar besok
     $cDampak = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $idSemBesok"))['c'];
