@@ -23,6 +23,7 @@ $check('password 8 diterima', password_ok('12345678') === true);
 $check('idle_timeout_seconds() admin default 3600', idle_timeout_seconds('admin') === 3600);
 $check('idle_timeout_seconds() mahasiswa default 14400', idle_timeout_seconds('mahasiswa') === 14400);
 $check('idle_timeout_seconds() role tak dikenal = mahasiswa', idle_timeout_seconds('dosen') === 14400);
+$check('idle_timeout_seconds() panitia default 7200', idle_timeout_seconds('panitia') === 7200);
 
 // sesi_kedaluwarsa(): null selalu kedaluwarsa; batas tepat belum, lewat sedikit kedaluwarsa.
 $check('sesi_kedaluwarsa() null = kedaluwarsa', sesi_kedaluwarsa(null, 1000, 900) === true);
@@ -457,6 +458,136 @@ $check('ICS tidak memuat kode tiket', !str_contains($icsKode, 'ACD-123456'));
 $icsUid1 = buat_ics($acaraTes, '2026-11-08 10:00:00');
 $icsUid2 = buat_ics($acaraTes, '2026-11-08 10:00:00');
 $check('ICS UID stabil', str_contains($icsUid1, 'UID:registrasi-123@academeet') && $icsUid1 === $icsUid2);
+
+// role_boleh_halaman() / role_boleh_aksi(): default deny untuk role asing.
+$check('role_boleh_halaman() admin boleh dashboard', role_boleh_halaman('admin', 'dashboard') === true);
+$check('role_boleh_halaman() panitia boleh scan', role_boleh_halaman('panitia', 'scan') === true);
+$check('role_boleh_halaman() panitia boleh peserta', role_boleh_halaman('panitia', 'peserta') === true);
+$check('role_boleh_halaman() panitia tolak dashboard', role_boleh_halaman('panitia', 'dashboard') === false);
+$check('role_boleh_halaman() panitia tolak laporan', role_boleh_halaman('panitia', 'laporan') === false);
+$check('role_boleh_halaman() panitia tolak panitia', role_boleh_halaman('panitia', 'panitia') === false);
+$check('role_boleh_halaman() panitia tolak impor_mahasiswa', role_boleh_halaman('panitia', 'impor_mahasiswa') === false);
+$check('role_boleh_halaman() kosong ditolak', role_boleh_halaman('', 'scan') === false);
+$check('role_boleh_halaman() asing ditolak', role_boleh_halaman('dosen', 'scan') === false);
+$check('role_boleh_halaman() ADMIN huruf besar ditolak', role_boleh_halaman('ADMIN', 'scan') === false);
+$check('role_boleh_halaman() mahasiswa ditolak', role_boleh_halaman('mahasiswa', 'scan') === false);
+
+$check('role_boleh_aksi() admin boleh hapus', role_boleh_aksi('admin', 'hapus') === true);
+$check('role_boleh_aksi() panitia boleh checkin', role_boleh_aksi('panitia', 'checkin') === true);
+$check('role_boleh_aksi() panitia boleh checkin_manual', role_boleh_aksi('panitia', 'checkin_manual') === true);
+$check('role_boleh_aksi() panitia tolak hapus', role_boleh_aksi('panitia', 'hapus') === false);
+$check('role_boleh_aksi() panitia tolak edit_seminar', role_boleh_aksi('panitia', 'edit_seminar') === false);
+$check('role_boleh_aksi() kosong ditolak', role_boleh_aksi('', 'checkin') === false);
+$check('role_boleh_aksi() asing ditolak', role_boleh_aksi('dosen', 'checkin') === false);
+
+// password_min_untuk_role() + batas 72 byte.
+$check('password_min_untuk_role() admin 12', password_min_untuk_role('admin') === 12);
+$check('password_min_untuk_role() panitia 10', password_min_untuk_role('panitia') === 10);
+$check('password_min_untuk_role() mahasiswa 8', password_min_untuk_role('mahasiswa') === 8);
+$check('password_min_untuk_role() asing 8', password_min_untuk_role('dosen') === 8);
+$check('password_ok_untuk_role() admin 11 ditolak', password_ok_untuk_role('admin', str_repeat('a', 11)) === false);
+$check('password_ok_untuk_role() admin 12 diterima', password_ok_untuk_role('admin', str_repeat('a', 12)) === true);
+$check('password_ok_untuk_role() panitia 9 ditolak', password_ok_untuk_role('panitia', str_repeat('a', 9)) === false);
+$check('password_ok_untuk_role() panitia 10 diterima', password_ok_untuk_role('panitia', str_repeat('a', 10)) === true);
+$check('password_ok_untuk_role() mahasiswa 8 diterima', password_ok_untuk_role('mahasiswa', str_repeat('a', 8)) === true);
+$check('password_ok_untuk_role() 73 byte ditolak', password_ok_untuk_role('mahasiswa', str_repeat('a', 73)) === false);
+$check('password_ok_untuk_role() 72 byte diterima', password_ok_untuk_role('admin', str_repeat('a', 72)) === true);
+
+// parse_csv_mahasiswa(): pemisah, BOM, header, kutip, baris kosong, encoding, formula.
+$csvKoma = "nim,nama,prodi,email\n123,Andi,Teknik Informatika,a@b.com\n";
+[$bv, $bk] = parse_csv_mahasiswa($csvKoma);
+$check('parse_csv_mahasiswa() koma: 1 baris valid', count($bv) === 1 && $bk === []);
+$check('parse_csv_mahasiswa() koma: nilai benar', $bv[0]['nim'] === '123' && $bv[0]['prodi'] === 'Teknik Informatika');
+
+$csvTitikKoma = "nim;nama;prodi;email\n123;Andi;Sistem Informasi;a@b.com\n";
+[$bv2, $bk2] = parse_csv_mahasiswa($csvTitikKoma);
+$check('parse_csv_mahasiswa() titik-koma terdeteksi', count($bv2) === 1 && $bv2[0]['email'] === 'a@b.com');
+
+$csvBom = "\xEF\xBB\xBFnim,nama,prodi,email\n123,Andi,Teknik Informatika,a@b.com\n";
+[$bvBom, $bkBom] = parse_csv_mahasiswa($csvBom);
+$check('parse_csv_mahasiswa() BOM dibuang', count($bvBom) === 1);
+
+$csvHeaderAcak = "Email,NIM,Nama,Prodi\nx@y.com,999,Budi,Manajemen Informatika\n";
+[$bvH, $bkH] = parse_csv_mahasiswa($csvHeaderAcak);
+$check('parse_csv_mahasiswa() header urutan bebas + huruf besar', count($bvH) === 1 && $bvH[0]['nim'] === '999');
+
+$csvKolomHilang = "nim,nama,email\n1,A,a@b.com\n";
+[$bvM, $bkM] = parse_csv_mahasiswa($csvKolomHilang);
+$check('parse_csv_mahasiswa() kolom hilang ditolak', $bvM === [] && count($bkM) === 1 && str_contains($bkM[0]['alasan'], 'prodi'));
+
+$csvEkstra = "nim,nama,prodi,email,catatan\n1,A,Teknik Informatika,a@b.com,hai\n";
+[$bvE, $bkE] = parse_csv_mahasiswa($csvEkstra);
+$check('parse_csv_mahasiswa() kolom ekstra diabaikan', count($bvE) === 1 && $bkE === []);
+
+$csvKosong = "nim,nama,prodi,email\n\n1,A,Teknik Informatika,a@b.com\n\n";
+[$bvKo, $bkKo] = parse_csv_mahasiswa($csvKosong);
+$check('parse_csv_mahasiswa() baris kosong dilewati', count($bvKo) === 1 && $bkKo === []);
+
+$csvKutip = "nim,nama,prodi,email\n1,\"A, B\",Teknik Informatika,a@b.com\n";
+[$bvKut, $bkKut] = parse_csv_mahasiswa($csvKutip);
+$check('parse_csv_mahasiswa() kutip + koma di dalam sel', count($bvKut) === 1 && $bvKut[0]['nama'] === 'A, B');
+
+$csvFormula = "nim,nama,prodi,email\n1,=SUM(A1),Teknik Informatika,a@b.com\n";
+[$bvF, $bkF] = parse_csv_mahasiswa($csvFormula);
+$check('parse_csv_mahasiswa() sel formula ditolak', $bvF === [] && count($bkF) === 1 && $bkF[0]['kolom'] === 'nama');
+
+$csvFormulaAt = "nim,nama,prodi,email\n@x,A,Teknik Informatika,a@b.com\n";
+[$bvFA, $bkFA] = parse_csv_mahasiswa($csvFormulaAt);
+$check('parse_csv_mahasiswa() sel @ ditolak', $bvFA === [] && count($bkFA) === 1);
+
+$csvNonUtf8 = "nim,nama,prodi,email\n1,A,Teknik Informatika,a@b.com\n" . "\xFF\xFE";
+[$bvN, $bkN] = parse_csv_mahasiswa($csvNonUtf8);
+$check('parse_csv_mahasiswa() non-UTF8 ditolak', $bvN === [] && count($bkN) === 1);
+
+$csvDupNim = "nim,nama,prodi,email\n1,A,Teknik Informatika,a@b.com\n1,B,Sistem Informasi,c@d.com\n";
+[$bvDn, $bkDn] = parse_csv_mahasiswa($csvDupNim);
+$check('parse_csv_mahasiswa() duplikat NIM dalam file', count($bvDn) === 1 && count($bkDn) === 1 && str_contains($bkDn[0]['alasan'], 'NIM duplikat'));
+
+$csvDupEmail = "nim,nama,prodi,email\n1,A,Teknik Informatika,a@b.com\n2,B,Sistem Informasi,A@B.com\n";
+[$bvDe, $bkDe] = parse_csv_mahasiswa($csvDupEmail);
+$check('parse_csv_mahasiswa() duplikat email case-insensitive', count($bvDe) === 1 && count($bkDe) === 1 && str_contains($bkDe[0]['alasan'], 'Email duplikat'));
+
+$csvBesar = "nim,nama,prodi,email\n";
+for ($i = 1; $i <= 501; $i++) {
+    $csvBesar .= "{$i},N{$i},Teknik Informatika,u{$i}@b.com\n";
+}
+[$bvB, $bkB] = parse_csv_mahasiswa($csvBesar);
+$check('parse_csv_mahasiswa() >500 baris ditolak', count($bvB) === 500 && count($bkB) === 1);
+
+// validasi_baris_impor(): kanonikalisasi prodi + validasi ambil alih dari validasi_data_diri.
+[$siapV, $errV] = validasi_baris_impor(
+    [['baris' => 2, 'nim' => '1', 'nama' => 'A', 'prodi' => 'teknik informatika', 'email' => 'a@b.com']],
+    prodi_terdaftar()
+);
+$check('validasi_baris_impor() prodi dikanonkan', count($siapV) === 1 && $siapV[0]['prodi'] === 'Teknik Informatika' && $errV === []);
+[$siapV2, $errV2] = validasi_baris_impor(
+    [['baris' => 2, 'nim' => '1', 'nama' => 'A', 'prodi' => 'Prodi Palsu', 'email' => 'a@b.com']],
+    prodi_terdaftar()
+);
+$check('validasi_baris_impor() prodi tak dikenal ditolak', $siapV2 === [] && count($errV2) === 1);
+
+// muat_teks(): muat, mengecil, memotong "…", lebar nol, ukuranMin tercapai.
+$ukur = static fn(string $t, float $s): float => strlen($t) * $s;
+[$mtTeks, $mtUkuran] = muat_teks($ukur, 'abc', 1000, 10, 8);
+$check('muat_teks() muat: teks utuh + ukuran awal', $mtTeks === 'abc' && $mtUkuran === 10.0);
+[$mtT2, $mtU2] = muat_teks($ukur, 'abcdefghij', 40, 10, 8);
+$check('muat_teks() mengecil 8 (40/10*1?)', $mtU2 <= 8.0 && $mtU2 >= 8.0);
+[$mtT3, $mtU3] = muat_teks($ukur, 'abcdefghij', 40, 10, 8);
+$check('muat_teks() memotong dengan "…"', str_ends_with($mtT3, '…') && $mtT3 !== 'abcdefghij');
+$check('muat_teks() hasil muat dalam lebar', $ukur($mtT3, $mtU3) <= 40);
+[$mtT4, $mtU4] = muat_teks($ukur, 'abc', 0, 10, 8);
+$check('muat_teks() lebar nol: teks apa adanya', $mtT4 === 'abc');
+[$mtT5, $mtU5] = muat_teks(static fn(string $t, float $s): float => 9999.0, 'abc', 5, 10, 8);
+$check('muat_teks() ukuranMin tercapai lalu potong habis', $mtU5 === 8.0 && $mtT5 === '…');
+
+// validasi_ttd(): jabatan tanpa nama ditolak, panjang 101 ditolak.
+$check('validasi_ttd() jabatan tanpa nama ditolak', validasi_ttd('', 'Ketua') !== '');
+$check('validasi_ttd() nama 101 ditolak', validasi_ttd(str_repeat('a', 101), '') !== '');
+$check('validasi_ttd() jabatan 101 ditolak', validasi_ttd('Andi', str_repeat('a', 101)) !== '');
+$check('validasi_ttd() nama saja valid', validasi_ttd('Andi', '') === '');
+$check('validasi_ttd() keduanya kosong valid', validasi_ttd('', '') === '');
+$check('validasi_ttd() keduanya valid', validasi_ttd('Andi', 'Ketua Pelaksana') === '');
+$check('validasi_ttd() karakter kontrol ditolak', validasi_ttd("An\x01di", '') !== '');
 
 echo $failed === 0 ? "\nSemua tes lulus.\n" : "\n{$failed} tes gagal.\n";
 exit($failed === 0 ? 0 : 1);

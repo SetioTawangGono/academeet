@@ -3,17 +3,25 @@
 date_default_timezone_set('Asia/Jakarta');
 
 /**
- * Timeout tidak aktif (detik) per role. Admin 60 menit, mahasiswa 240 menit.
- * Bisa dioverride lewat env ACADEMEET_IDLE_ADMIN_MIN / ACADEMEET_IDLE_USER_MIN
- * (untuk pengujian). Role tak dikenal memakai batas mahasiswa.
+ * Timeout tidak aktif (detik) per role. Admin 60 menit, panitia 120 menit,
+ * mahasiswa 240 menit. Bisa dioverride lewat env ACADEMEET_IDLE_ADMIN_MIN /
+ * ACADEMEET_IDLE_PANITIA_MIN / ACADEMEET_IDLE_USER_MIN (untuk pengujian).
+ * Role tak dikenal memakai batas mahasiswa.
  */
 function idle_timeout_seconds(string $role): int
 {
-    $envName = $role === 'admin' ? 'ACADEMEET_IDLE_ADMIN_MIN' : 'ACADEMEET_IDLE_USER_MIN';
+    if ($role === 'admin') {
+        $envName = 'ACADEMEET_IDLE_ADMIN_MIN';
+        $default = 60;
+    } elseif ($role === 'panitia') {
+        $envName = 'ACADEMEET_IDLE_PANITIA_MIN';
+        $default = 120;
+    } else {
+        $envName = 'ACADEMEET_IDLE_USER_MIN';
+        $default = 240;
+    }
     $env = getenv($envName);
-    $menit = ($env !== false && $env !== '' && is_numeric($env))
-        ? (int) $env
-        : ($role === 'admin' ? 60 : 240);
+    $menit = ($env !== false && $env !== '' && is_numeric($env)) ? (int) $env : $default;
     return max(1, $menit) * 60;
 }
 
@@ -323,6 +331,249 @@ function validasi_data_diri(string $nama, string $nim, string $prodi, string $em
     }
     if (!in_array($prodi, prodi_terdaftar(), true) && !in_array($prodi, $prodiBolehLama, true)) {
         return 'Program studi tidak dikenali. Pilih dari daftar.';
+    }
+    return '';
+}
+
+/** Halaman admin.php yang boleh dibuka sebuah role. Admin boleh semua. Panitia hanya scan & peserta. */
+function role_boleh_halaman(string $role, string $page): bool
+{
+    if ($role === 'admin') {
+        return true;
+    }
+    if ($role === 'panitia') {
+        return in_array($page, ['scan', 'peserta'], true);
+    }
+    return false;
+}
+
+/** Aksi POST yang boleh dilakukan sebuah role. Admin boleh semua; panitia hanya check-in. */
+function role_boleh_aksi(string $role, string $aksi): bool
+{
+    if ($role === 'admin') {
+        return true;
+    }
+    if ($role === 'panitia') {
+        return in_array($aksi, ['checkin', 'checkin_manual'], true);
+    }
+    return false;
+}
+
+/** Panjang minimal password per role. Admin 12, panitia 10, mahasiswa 8. */
+function password_min_untuk_role(string $role): int
+{
+    if ($role === 'admin') {
+        return 12;
+    }
+    if ($role === 'panitia') {
+        return 10;
+    }
+    return 8;
+}
+
+/** Batas atas panjang password: bcrypt memotong di 72 byte, jadi lebih panjang ditolak. */
+function password_max_bytes(): int
+{
+    return 72;
+}
+
+/** Password valid untuk role: panjang minimal role + tidak melebihi 72 byte. */
+function password_ok_untuk_role(string $role, string $password): bool
+{
+    $len = strlen($password);
+    return $len >= password_min_untuk_role($role) && $len <= password_max_bytes();
+}
+
+/** Sel CSV yang diawali karakter formula/tab/CR tidak boleh (formula injection). */
+function csv_sel_bahaya(string $value): bool
+{
+    return preg_match('/^[=+\-@\t\r]/', $value) === 1;
+}
+
+/** Buang karakter kontrol kecuali tab; kembalikan string bersih. */
+function buang_karakter_kontrol(string $value): string
+{
+    return (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value);
+}
+
+/**
+ * Parse isi CSV impor mahasiswa. Murni (tanpa DB).
+ * Mengembalikan [array $barisValid, array $kesalahan]. $kesalahan tiap item:
+ * ['baris' => int, 'kolom' => string, 'alasan' => string]. Baris header bukan data.
+ * Kolom wajib (case-insensitive, urutan bebas): nim, nama, prodi, email.
+ */
+function parse_csv_mahasiswa(string $isi): array
+{
+    $barisValid = [];
+    $kesalahan = [];
+
+    if (!mb_check_encoding($isi, 'UTF-8')) {
+        return [[], [['baris' => 0, 'kolom' => '', 'alasan' => 'File bukan teks UTF-8 yang valid.']]];
+    }
+    // Buang BOM UTF-8 di awal.
+    if (str_starts_with($isi, "\xEF\xBB\xBF")) {
+        $isi = substr($isi, 3);
+    }
+
+    $isi = str_replace(["\r\n", "\r"], "\n", $isi);
+    // fgetcsv butuh stream; pakai php://temp agar konsisten (kutip & pemisah).
+    $stream = fopen('php://temp', 'r+');
+    fwrite($stream, $isi);
+    rewind($stream);
+
+    // Deteksi pemisah dari baris header mentah.
+    $headerLine = (string) fgets($stream);
+    rewind($stream);
+    $pemisah = (substr_count($headerLine, ';') > substr_count($headerLine, ',')) ? ';' : ',';
+
+    $header = fgetcsv($stream, 0, $pemisah);
+    if ($header === false || $header === null) {
+        fclose($stream);
+        return [[], [['baris' => 1, 'kolom' => '', 'alasan' => 'Header CSV tidak ditemukan.']]];
+    }
+    $peta = [];
+    foreach ($header as $i => $kolom) {
+        $nama = strtolower(trim((string) $kolom));
+        if (in_array($nama, ['nim', 'nama', 'prodi', 'email'], true) && !isset($peta[$nama])) {
+            $peta[$nama] = $i;
+        }
+    }
+    $hilang = array_diff(['nim', 'nama', 'prodi', 'email'], array_keys($peta));
+    if ($hilang) {
+        fclose($stream);
+        return [[], [['baris' => 1, 'kolom' => '', 'alasan' => 'Header harus memuat kolom: nim, nama, prodi, email (kolom hilang: ' . implode(', ', $hilang) . ').']]];
+    }
+
+    $lihatNim = [];
+    $lihatEmail = [];
+    $nomor = 1; // baris header = 1, data mulai 2.
+    while (($row = fgetcsv($stream, 0, $pemisah)) !== false) {
+        $nomor++;
+        if ($row === null || (count($row) === 1 && trim((string) $row[0]) === '')) {
+            continue; // baris kosong
+        }
+        if (count($barisValid) + count($kesalahan) >= 500) {
+            $kesalahan[] = ['baris' => $nomor, 'kolom' => '', 'alasan' => 'Maksimal 500 baris data per impor.'];
+            break;
+        }
+        $sel = static function (array $row, array $peta, string $kunci): string {
+            return trim((string) ($row[$peta[$kunci]] ?? ''));
+        };
+        $nim = $sel($row, $peta, 'nim');
+        $nama = $sel($row, $peta, 'nama');
+        $prodi = $sel($row, $peta, 'prodi');
+        $email = $sel($row, $peta, 'email');
+
+        $bad = false;
+        foreach (['nim' => $nim, 'nama' => $nama, 'prodi' => $prodi, 'email' => $email] as $kolom => $v) {
+            if (csv_sel_bahaya($v)) {
+                $kesalahan[] = ['baris' => $nomor, 'kolom' => $kolom, 'alasan' => 'Nilai tidak boleh diawali =, +, -, @, tab, atau CR.'];
+                $bad = true;
+            }
+        }
+        $nim = buang_karakter_kontrol($nim);
+        $nama = buang_karakter_kontrol($nama);
+        $prodi = buang_karakter_kontrol($prodi);
+        $email = buang_karakter_kontrol($email);
+        if ($bad) {
+            continue;
+        }
+        if ($nim === '' || $nama === '' || $prodi === '' || $email === '') {
+            $kesalahan[] = ['baris' => $nomor, 'kolom' => '', 'alasan' => 'Sel nim, nama, prodi, email wajib terisi.'];
+            continue;
+        }
+        $nimKey = strtolower($nim);
+        $emailKey = strtolower($email);
+        if (isset($lihatNim[$nimKey])) {
+            $kesalahan[] = ['baris' => $nomor, 'kolom' => 'nim', 'alasan' => 'NIM duplikat di dalam file (baris ' . $lihatNim[$nimKey] . ').'];
+            continue;
+        }
+        if (isset($lihatEmail[$emailKey])) {
+            $kesalahan[] = ['baris' => $nomor, 'kolom' => 'email', 'alasan' => 'Email duplikat di dalam file (baris ' . $lihatEmail[$emailKey] . ').'];
+            continue;
+        }
+        $lihatNim[$nimKey] = $nomor;
+        $lihatEmail[$emailKey] = $nomor;
+        $barisValid[] = ['baris' => $nomor, 'nim' => $nim, 'nama' => $nama, 'prodi' => $prodi, 'email' => $email];
+    }
+    fclose($stream);
+    return [$barisValid, $kesalahan];
+}
+
+/**
+ * Validasi baris hasil parse terhadap aturan registrasi (murni + prodi resmi).
+ * Mengembalikan [array $siap, array $kesalahan].
+ */
+function validasi_baris_impor(array $baris, array $prodi): array
+{
+    $siap = [];
+    $kesalahan = [];
+    foreach ($baris as $b) {
+        $nama = (string) ($b['nama'] ?? '');
+        $nim = (string) ($b['nim'] ?? '');
+        $prodiInput = (string) ($b['prodi'] ?? '');
+        $email = (string) ($b['email'] ?? '');
+        $nomor = (int) ($b['baris'] ?? 0);
+
+        // Cocokkan prodi tanpa membedakan huruf besar/kecil, simpan bentuk kanonik.
+        $prodiKanon = '';
+        foreach ($prodi as $p) {
+            if (strcasecmp($p, $prodiInput) === 0) {
+                $prodiKanon = $p;
+                break;
+            }
+        }
+        if ($prodiKanon === '') {
+            $kesalahan[] = ['baris' => $nomor, 'kolom' => 'prodi', 'alasan' => 'Program studi tidak dikenali: ' . $prodiInput . '.'];
+            continue;
+        }
+        $err = validasi_data_diri($nama, $nim, $prodiKanon, $email);
+        if ($err !== '') {
+            $kesalahan[] = ['baris' => $nomor, 'kolom' => '', 'alasan' => $err];
+            continue;
+        }
+        $siap[] = ['baris' => $nomor, 'nim' => $nim, 'nama' => $nama, 'prodi' => $prodiKanon, 'email' => $email];
+    }
+    return [$siap, $kesalahan];
+}
+
+/**
+ * Muat teks dalam lebar maksimum: kecilkan font sampai minimum, lalu potong "…".
+ * $ukur(string $teks, float $ukuran): float. Mengembalikan [string $teks, float $ukuran].
+ */
+function muat_teks(callable $ukur, string $teks, float $lebarMaks, float $ukuranAwal, float $ukuranMin): array
+{
+    if ($teks === '' || $lebarMaks <= 0) {
+        return [$teks, $ukuranAwal];
+    }
+    $ukuran = $ukuranAwal;
+    while ($ukuran > $ukuranMin && $ukur($teks, $ukuran) > $lebarMaks) {
+        $ukuran = max($ukuranMin, $ukuran - 0.5);
+    }
+    if ($ukur($teks, $ukuran) <= $lebarMaks) {
+        return [$teks, $ukuran];
+    }
+    $potong = $teks;
+    while ($potong !== '' && $ukur($potong . '…', $ukuran) > $lebarMaks) {
+        $potong = function_exists('mb_substr') ? mb_substr($potong, 0, -1, 'UTF-8') : substr($potong, 0, -1);
+    }
+    return [$potong . '…', $ukuran];
+}
+
+/** Validasi field tanda tangan sertifikat. Mengembalikan pesan error, atau ''. */
+function validasi_ttd(string $nama, string $jabatan): string
+{
+    if (str_len($nama) > 100) {
+        return 'Nama penandatangan maksimal 100 karakter.';
+    }
+    if (str_len($jabatan) > 100) {
+        return 'Jabatan penandatangan maksimal 100 karakter.';
+    }
+    if ($jabatan !== '' && $nama === '') {
+        return 'Nama penandatangan wajib diisi bila jabatan diisi.';
+    }
+    if (preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', $nama . $jabatan) === 1) {
+        return 'Nama dan jabatan tidak boleh memuat karakter kontrol.';
     }
     return '';
 }
