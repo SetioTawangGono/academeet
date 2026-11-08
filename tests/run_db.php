@@ -348,6 +348,195 @@ try {
     $check('filter: dari>sampai ditukar', $fk3['dari'] === '2026-01-01' && $fk3['sampai'] === '2027-01-01');
     $fk4 = normalisasi_filter_katalog(['dari' => '2027-02-30']);
     $check('filter: tanggal tak valid → kosong', $fk4['dari'] === '');
+
+    // ===== Paket D: proses_pengingat_h1 =====
+    $idSemBesok = ins_seminar($conn, 'PaketD Besok ' . $tag, $besok, 20);
+    $idSemH2 = ins_seminar($conn, 'PaketD HariIni ' . $tag, $hariIni, 20);
+    $idSemSelesaiD = ins_seminar($conn, 'PaketD Selesai ' . $tag, $besok, 20, 'Selesai');
+
+    $idUBesok = ins_user($conn, 'D Besok ' . $tag, "dbesok{$tag}@test.local");
+    $idUH2 = ins_user($conn, 'D H2 ' . $tag, "dh2{$tag}@test.local");
+    $idUHadir = ins_user($conn, 'D Hadir ' . $tag, "dhadir{$tag}@test.local");
+    $idUOff = ins_user($conn, 'D Off ' . $tag, "doff{$tag}@test.local");
+    $idUSelesai = ins_user($conn, 'D Selesai ' . $tag, "dselesai{$tag}@test.local");
+    // Matikan preferensi notif user uji "Off".
+    mysqli_query($conn, "UPDATE users SET notif_email = 0 WHERE id_user = $idUOff");
+
+    $regBesok = ins_reg($conn, $idUBesok, $idSemBesok, 'Belum Hadir', 'D-' . $tag . '-1');
+    $regH2 = ins_reg($conn, $idUH2, $idSemH2, 'Belum Hadir', 'D-' . $tag . '-2');
+    $regHadir = ins_reg($conn, $idUHadir, $idSemBesok, 'Hadir', 'D-' . $tag . '-3');
+    $regOff = ins_reg($conn, $idUOff, $idSemBesok, 'Belum Hadir', 'D-' . $tag . '-4');
+    $regSelesai = ins_reg($conn, $idUSelesai, $idSemSelesaiD, 'Belum Hadir', 'D-' . $tag . '-5');
+
+    // Pengirim palsu: catat tujuan, tanpa email nyata.
+    $terkirim = [];
+    $palsuSukses = static function (string $ke, string $subjek, string $isi) use (&$terkirim): bool {
+        $terkirim[] = $ke;
+        return true;
+    };
+
+    $r1 = proses_pengingat_h1($conn, $besok, $palsuSukses, 50);
+    $check('H-1: user besok terkirim', in_array("dbesok{$tag}@test.local", $terkirim, true));
+    $check('H-1: user H2 tidak dikirim', !in_array("dh2{$tag}@test.local", $terkirim, true));
+    $check('H-1: tiket Hadir tidak dikirim', !in_array("dhadir{$tag}@test.local", $terkirim, true));
+    $check('H-1: user notif=0 tidak dikirim', !in_array("doff{$tag}@test.local", $terkirim, true));
+    $check('H-1: seminar Selesai tidak dikirim', !in_array("dselesai{$tag}@test.local", $terkirim, true));
+    $check('H-1: sukses menandai h1_terkirim_at', mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regBesok"))['h1_terkirim_at'] !== null);
+    $check('H-1: user H2 tidak ditandai', mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regH2"))['h1_terkirim_at'] === null);
+    $check('H-1: tiket Hadir tidak ditandai', mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regHadir"))['h1_terkirim_at'] === null);
+    $check('H-1: user notif=0 tidak dikirim', mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regOff"))['h1_terkirim_at'] === null);
+    $check('H-1: seminar Selesai tidak dikirim', mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regSelesai"))['h1_terkirim_at'] === null);
+
+    // Jalankan kedua kali: tidak ada pengiriman ganda.
+    $terkirim = [];
+    $r2 = proses_pengingat_h1($conn, $besok, $palsuSukses, 50);
+    $check('H-1: eksekusi kedua tidak mengirim ganda', $r2['terkirim'] === 0 && $terkirim === []);
+
+    // Pengirim yang melempar -> kolom dikembalikan NULL, eksekusi berikutnya mencoba lagi.
+    $idSemGagal = ins_seminar($conn, 'PaketD Gagal ' . $tag, $besok, 20);
+    $idUGagal = ins_user($conn, 'D Gagal ' . $tag, "dgagal{$tag}@test.local");
+    $regGagal = ins_reg($conn, $idUGagal, $idSemGagal, 'Belum Hadir', 'D-' . $tag . '-6');
+    $palsuLempar = static function () { throw new RuntimeException('SMTP mati'); };
+    $r3 = proses_pengingat_h1($conn, $besok, $palsuLempar, 50);
+    $check('H-1: pengirim melempar -> gagal dicatat', $r3['gagal'] >= 1);
+    $check('H-1: gagal mengembalikan h1_terkirim_at = NULL', mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regGagal"))['h1_terkirim_at'] === null);
+
+    // 3 kegagalan berurutan menghentikan eksekusi (pengirim selalu melempar).
+    for ($i = 0; $i < 3; $i++) {
+        $idUStop = ins_user($conn, "D Stop$i " . $tag, "dstop{$i}_{$tag}@test.local");
+        ins_reg($conn, $idUStop, $idSemGagal, 'Belum Hadir', "D-{$tag}-S{$i}");
+    }
+    $rStop = proses_pengingat_h1($conn, $besok, $palsuLempar, 50);
+    $check('H-1: 3 kegagalan berurutan -> dihentikan', $rStop['dihentikan'] === true && $rStop['gagal'] === 3);
+
+    // Batas per eksekusi: hitung berapa yang benar-benar dikirim pada eksekusi ini.
+    $idSemBatas = ins_seminar($conn, 'PaketD Batas ' . $tag, $besok, 20);
+    for ($i = 0; $i < 5; $i++) {
+        $idUB = ins_user($conn, "D Batas$i " . $tag, "dbatas{$i}_{$tag}@test.local");
+        ins_reg($conn, $idUB, $idSemBatas, 'Belum Hadir', "D-{$tag}-B{$i}");
+    }
+    $terkirim = [];
+    $r5 = proses_pengingat_h1($conn, $besok, $palsuSukses, 2);
+    $check('H-1: batas 2 per eksekusi dihormati', $r5['terkirim'] === 2 && count($terkirim) === 2);
+
+    // Baris sudah ditandai tidak dikirim ulang: user yang sudah terkirim tak muncul lagi.
+    $sudah = $terkirim;
+    $terkirim = [];
+    proses_pengingat_h1($conn, $besok, $palsuSukses, 50);
+    $tumpang = array_intersect($sudah, $terkirim);
+    $check('H-1: baris sudah ditandai tidak dikirim ulang', $tumpang === []);
+
+    // ===== Paket D: ubah_seminar reset h1_terkirim_at saat tanggal berubah =====
+    $idSemReset = ins_seminar($conn, 'PaketD Reset ' . $tag, $besok, 20);
+    $idUReset = ins_user($conn, 'D Reset ' . $tag, "dreset{$tag}@test.local");
+    $regReset = ins_reg($conn, $idUReset, $idSemReset, 'Belum Hadir', 'D-' . $tag . '-R1');
+    mysqli_query($conn, "UPDATE registrations SET h1_terkirim_at = NOW() WHERE id_registrasi = $regReset");
+    // Ubah tanggal -> harus reset.
+    [$t, ] = ubah_seminar($conn, $idSemReset, ['judul' => 'PaketD Reset ' . $tag, 'id_pemateri' => $idPemateri, 'tanggal' => date('Y-m-d', strtotime('+3 day')), 'kuota_total' => 20]);
+    $check('ubah tanggal -> h1_terkirim_at direset', $t === 'success' && mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regReset"))['h1_terkirim_at'] === null);
+
+    // Ubah judul saja -> tidak reset.
+    mysqli_query($conn, "UPDATE registrations SET h1_terkirim_at = NOW() WHERE id_registrasi = $regReset");
+    [$t, ] = ubah_seminar($conn, $idSemReset, ['judul' => 'PaketD Reset Judul ' . $tag, 'id_pemateri' => $idPemateri, 'tanggal' => date('Y-m-d', strtotime('+3 day')), 'kuota_total' => 20]);
+    $check('ubah judul saja -> h1_terkirim_at TIDAK direset', $t === 'success' && mysqli_fetch_assoc(mysqli_query($conn, "SELECT h1_terkirim_at FROM registrations WHERE id_registrasi=$regReset"))['h1_terkirim_at'] !== null);
+
+    // ===== Paket D: jadwal_diubah_at (F6b) =====
+    $tglJ = date('Y-m-d', strtotime('+2 day'));
+    $idSemJ = ins_seminar($conn, 'PaketD J ' . $tag, $tglJ, 20, 'Aktif', ['jam_mulai' => '09:00:00', 'jam_selesai' => '10:00:00', 'lokasi' => 'Ruang A', 'link_online' => 'https://contoh.test/j']);
+    // Awal: NULL.
+    $check('jadwal: awal NULL', mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'] === null);
+
+    $basis = ['judul' => 'PaketD J ' . $tag, 'id_pemateri' => $idPemateri, 'tanggal' => $tglJ, 'kuota_total' => 20,
+        'jam_mulai' => '09:00', 'jam_selesai' => '10:00', 'lokasi' => 'Ruang A', 'link_online' => 'https://contoh.test/j'];
+
+    // Ubah judul saja -> tidak berubah.
+    [$t, ] = ubah_seminar($conn, $idSemJ, array_merge($basis, ['judul' => 'PaketD J Baru ' . $tag]));
+    $check('jadwal: ganti judul -> jadwal_diubah_at tetap NULL', mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'] === null);
+
+    // Ganti kuota saja -> tidak berubah.
+    [$t, ] = ubah_seminar($conn, $idSemJ, array_merge($basis, ['judul' => 'PaketD J Baru ' . $tag, 'kuota_total' => 25]));
+    $check('jadwal: ganti kuota -> tetap NULL', mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'] === null);
+
+    // Ganti lokasi -> terisi.
+    [$t, ] = ubah_seminar($conn, $idSemJ, array_merge($basis, ['judul' => 'PaketD J Baru ' . $tag, 'kuota_total' => 25, 'lokasi' => 'Ruang B']));
+    $check('jadwal: ganti lokasi -> jadwal_diubah_at terisi', $t === 'success' && mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'] !== null);
+    $stamp1 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'];
+
+    // Ubah tanpa perubahan jadwal (judul+kuota) -> cap TIDAK berubah.
+    [$t, ] = ubah_seminar($conn, $idSemJ, array_merge($basis, ['judul' => 'PaketD J Lagi ' . $tag, 'kuota_total' => 30, 'lokasi' => 'Ruang B']));
+    $stamp2 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'];
+    $check('jadwal: tanpa perubahan jadwal -> cap tidak berubah', $stamp2 === $stamp1);
+
+    // Jam mulai berubah -> terisi/berubah.
+    sleep(1);
+    [$t, ] = ubah_seminar($conn, $idSemJ, array_merge($basis, ['judul' => 'PaketD J Lagi ' . $tag, 'kuota_total' => 30, 'lokasi' => 'Ruang B', 'jam_mulai' => '08:00']));
+    $stamp3 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'];
+    $check('jadwal: ganti jam mulai -> cap berubah', $stamp3 !== $stamp1);
+
+    // Mengosongkan lokasi yang sebelumnya ada -> dianggap perubahan.
+    $stampBefore = $stamp3;
+    sleep(1);
+    [$t, ] = ubah_seminar($conn, $idSemJ, array_merge($basis, ['judul' => 'PaketD J Lagi ' . $tag, 'kuota_total' => 30, 'lokasi' => '', 'jam_mulai' => '08:00']));
+    $stamp4 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ"))['jadwal_diubah_at'];
+    $check('jadwal: kosongkan lokasi (sebelumnya ada) -> cap berubah', $stamp4 !== $stampBefore);
+
+    // Lokasi tetap NULL (kosong->kosong) -> bukan perubahan.
+    $idSemJ2 = ins_seminar($conn, 'PaketD J2 ' . $tag, $tglJ, 20);
+    $basis2 = ['judul' => 'PaketD J2 ' . $tag, 'id_pemateri' => $idPemateri, 'tanggal' => $tglJ, 'kuota_total' => 20, 'lokasi' => ''];
+    [$t, ] = ubah_seminar($conn, $idSemJ2, $basis2);
+    $check('jadwal: lokasi kosong->kosong -> tetap NULL', mysqli_fetch_assoc(mysqli_query($conn, "SELECT jadwal_diubah_at FROM seminars WHERE id_seminar=$idSemJ2"))['jadwal_diubah_at'] === null);
+
+    // ===== Paket D: konfirmasi pendaftaran tidak menggagalkan (pengirim konfirmasi aman) =====
+    // kirim_konfirmasi_pendaftaran() harus tetap aman walau SMTP tak diset (best-effort).
+    $idUKonf = ins_user($conn, 'D Konf ' . $tag, "dkonf{$tag}@test.local");
+    kirim_konfirmasi_pendaftaran($conn, $idUKonf, ['judul' => 'X', 'pemateri' => 'Y', 'tanggal' => $besok, 'jam_mulai' => null, 'jam_selesai' => null, 'lokasi' => null], 'ACD-TEST');
+    $check('konfirmasi best-effort tidak melempar', true);
+
+    // ===== Paket D: statistik grafik =====
+    // Grafik (1): pendaftar per bulan, created_at NULL dikecualikan.
+    $idSemGraf = ins_seminar($conn, 'PaketD Graf ' . $tag, $besok, 20);
+    $idUGraf = ins_user($conn, 'D Graf ' . $tag, "dgraf{$tag}@test.local");
+    $regGraf = ins_reg($conn, $idUGraf, $idSemGraf, 'Belum Hadir', 'D-' . $tag . '-G1'); // created_at otomatis
+    // Baris NULL buatan untuk memastikan dikecualikan.
+    $idUGraf2 = ins_user($conn, 'D Graf2 ' . $tag, "dgraf2{$tag}@test.local");
+    $regGraf2 = ins_reg($conn, $idUGraf2, $idSemGraf, 'Belum Hadir', 'D-' . $tag . '-G2');
+    mysqli_query($conn, "UPDATE registrations SET created_at = NULL WHERE id_registrasi = $regGraf2");
+    $graf = statistik_pendaftar_bulanan($conn, 12);
+    $check('grafik bulanan: 12 label', count($graf['bulan']) === 12);
+    $check('grafik bulanan: urut kronologis', $graf['bulan'][0]['label'] < $graf['bulan'][11]['label']);
+    $check('grafik bulanan: bulan ini berisi >= 1', (int) end($graf['bulan'])['nilai'] >= 1);
+    $check('grafik bulanan: created_at NULL dikecualikan (tanpa_waktu >= 1)', $graf['tanpa_waktu'] >= 1);
+    $labelBulanIni = date('Y-m');
+    $found = false;
+    foreach ($graf['bulan'] as $bl) { if ($bl['label'] === $labelBulanIni) { $found = true; } }
+    $check('grafik bulanan: label bulan ini ada', $found);
+
+    // Grafik (2): kehadiran seminar (persen terhitung di pemanggil; di sini cek data mentah).
+    $idSemHad = ins_seminar($conn, 'PaketD HadirSem ' . $tag, $kemarin, 20, 'Selesai');
+    $idUHa = ins_user($conn, 'D Ha ' . $tag, "dha{$tag}@test.local");
+    $idUHa2 = ins_user($conn, 'D Ha2 ' . $tag, "dha2{$tag}@test.local");
+    ins_reg($conn, $idUHa, $idSemHad, 'Hadir', 'D-' . $tag . '-H1');
+    ins_reg($conn, $idUHa2, $idSemHad, 'Belum Hadir', 'D-' . $tag . '-H2');
+    $kh = statistik_kehadiran_seminar($conn, 10);
+    $semHad = null;
+    foreach ($kh as $row) { if ($row['judul'] === 'PaketD HadirSem ' . $tag) { $semHad = $row; } }
+    $check('grafik kehadiran: terdaftar=2 hadir=1', $semHad !== null && $semHad['terdaftar'] === 2 && $semHad['hadir'] === 1);
+    $check('grafik kehadiran: maksimal 10 baris', count($kh) <= 10);
+    $check('grafik kehadiran: hanya efektif-Selesai', $semHad !== null);
+
+    // Grafik (3): 5 seminar terpopuler.
+    $kp = statistik_seminar_populer($conn, 5);
+    $check('grafik populer: maksimal 5 baris', count($kp) <= 5);
+    $srt = true;
+    for ($i = 1; $i < count($kp); $i++) { if ($kp[$i]['terdaftar'] > $kp[$i-1]['terdaftar']) { $srt = false; } }
+    $check('grafik populer: urut menurun', $srt);
+
+    // ===== Paket D: hitung peserta terdampak (konfirmasi hapus) =====
+    $jml = count([$regBesok, $regHadir, $regOff]); // 3 registrasi di seminar besok
+    $cDampak = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $idSemBesok"))['c'];
+    $check('jumlah peserta terdampak benar', $cDampak === 3);
+    $cKosong = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $idSemJ2"))['c'];
+    $check('jumlah peserta terdampak 0 jika tak ada', $cKosong === 0);
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";

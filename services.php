@@ -71,7 +71,7 @@ function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poste
         return ['danger', 'Gagal memulai transaksi.', false];
     }
     try {
-        $stmt = mysqli_prepare($conn, "SELECT judul, pemateri, tanggal, status FROM seminars WHERE id_seminar = ? FOR UPDATE");
+        $stmt = mysqli_prepare($conn, "SELECT judul, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, link_online, status FROM seminars WHERE id_seminar = ? FOR UPDATE");
         mysqli_stmt_bind_param($stmt, 'i', $id_seminar);
         mysqli_stmt_execute($stmt);
         $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
@@ -150,11 +150,20 @@ function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poste
 
         $sisa = $kuota_total - $pendaftar;
         $nama_pemateri = $pmt['nama'];
+
+        // Deteksi perubahan jadwal (tanggal/jam/lokasi/link). NULL dan '' dianggap sama.
+        $norm = static fn($v): string => trim((string) $v);
+        $jadwal_berubah = $norm($tanggal) !== $norm($row['tanggal'])
+            || $norm($jam_mulai) !== $norm($row['jam_mulai'])
+            || $norm($jam_selesai) !== $norm($row['jam_selesai'])
+            || $norm($lokasi) !== $norm($row['lokasi'])
+            || $norm($link_online) !== $norm($row['link_online']);
+
         if ($poster !== null) {
-            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, lokasi = ?, link_online = ?, kategori = ?, deskripsi = ?, kuota_total = ?, kuota = ?, poster = ? WHERE id_seminar = ?");
+            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, lokasi = ?, link_online = ?, kategori = ?, deskripsi = ?, kuota_total = ?, kuota = ?, poster = ?, jadwal_diubah_at = " . ($jadwal_berubah ? 'NOW()' : 'jadwal_diubah_at') . " WHERE id_seminar = ?");
             mysqli_stmt_bind_param($stmt, 'sissssssssiisi', $judul, $id_pemateri, $nama_pemateri, $tanggal, $jam_mulai, $jam_selesai, $lokasi, $link_online, $kategori, $deskripsi, $kuota_total, $sisa, $poster, $id_seminar);
         } else {
-            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, lokasi = ?, link_online = ?, kategori = ?, deskripsi = ?, kuota_total = ?, kuota = ? WHERE id_seminar = ?");
+            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, lokasi = ?, link_online = ?, kategori = ?, deskripsi = ?, kuota_total = ?, kuota = ?, jadwal_diubah_at = " . ($jadwal_berubah ? 'NOW()' : 'jadwal_diubah_at') . " WHERE id_seminar = ?");
             mysqli_stmt_bind_param($stmt, 'sissssssssiii', $judul, $id_pemateri, $nama_pemateri, $tanggal, $jam_mulai, $jam_selesai, $lokasi, $link_online, $kategori, $deskripsi, $kuota_total, $sisa, $id_seminar);
         }
         if (!mysqli_stmt_execute($stmt)) {

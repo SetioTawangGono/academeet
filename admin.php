@@ -826,7 +826,7 @@ if (isset($_POST['reset_password'])) {
                                 $total = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM seminars $where"))['c'];
                                 $p = min($p, max(1, (int) ceil($total / $per)));
                                 $offset = ($p - 1) * $per;
-                                $seminar = mysqli_query($conn, "SELECT * FROM seminars $where ORDER BY tanggal ASC LIMIT $offset, $per");
+                                $seminar = mysqli_query($conn, "SELECT *, (SELECT COUNT(*) FROM registrations r WHERE r.id_seminar = seminars.id_seminar) AS jml_peserta FROM seminars $where ORDER BY tanggal ASC LIMIT $offset, $per");
                                 $ada_filter = $q !== '' || $filter_aktif;
                                 if (mysqli_num_rows($seminar) > 0) {
                                     while ($row = mysqli_fetch_assoc($seminar)) {
@@ -877,7 +877,7 @@ if (isset($_POST['reset_password'])) {
                                                         $aksi_selesai
                                                         <button type='button'
                                                             class='btn btn-sm btn-light-danger fw-semibold js-hapus-seminar'
-                                                            data-id='$id_sem' data-judul=\"$judul_attr\">
+                                                            data-id='$id_sem' data-judul=\"$judul_attr\" data-peserta='" . (int) ($row['jml_peserta'] ?? 0) . "'>
                                                             <i class='bi bi-trash me-1'></i>Hapus
                                                         </button>
                                                     </div>
@@ -911,6 +911,8 @@ if (isset($_POST['reset_password'])) {
                             </div>
                             <div class="modal-body pt-3">
                                 <p class="text-secondary mb-0">Seminar <strong id="judulHapus"></strong> beserta seluruh data pendaftar akan dihapus permanen.</p>
+                                <p class="text-danger small mb-0 mt-2" id="pesertaHapus"></p>
+                                <p class="text-muted small mb-0 mt-2">Bila hanya jadwal/detail yang berubah, sebaiknya gunakan <strong>Edit</strong> agar tiket peserta tetap berlaku.</p>
                             </div>
                             <div class="modal-footer border-0 pt-0">
                                 <button type="button" class="btn btn-light fw-semibold px-4" data-bs-dismiss="modal">Batal</button>
@@ -2019,13 +2021,20 @@ if (isset($_POST['reset_password'])) {
     // Modal Hapus Seminar
     const modalHapusEl = document.getElementById('modalHapus');
     const modalHapus = modalHapusEl ? new bootstrap.Modal(modalHapusEl) : null;
-    function konfirmasiHapus(id, judul) {
+    function konfirmasiHapus(id, judul, peserta) {
         if (!modalHapus) return;
         const elJudul = document.getElementById('judulHapus');
         const elId = document.getElementById('inputHapusId');
+        const elPeserta = document.getElementById('pesertaHapus');
         if (!elJudul || !elId) return;
         elJudul.textContent = judul;
         elId.value = id;
+        if (elPeserta) {
+            const n = parseInt(peserta, 10) || 0;
+            elPeserta.textContent = n > 0
+                ? n + ' peserta terdaftar akan kehilangan tiket mereka.'
+                : 'Belum ada peserta terdaftar pada seminar ini.';
+        }
         modalHapus.show();
     }
 
@@ -2069,7 +2078,7 @@ if (isset($_POST['reset_password'])) {
     function bindAksi(selector, handler) {
         document.querySelectorAll(selector).forEach(function (btn) {
             btn.addEventListener('click', function () {
-                handler(parseInt(btn.dataset.id, 10), btn.dataset.judul || btn.dataset.nama || '');
+                handler(parseInt(btn.dataset.id, 10), btn.dataset.judul || btn.dataset.nama || '', btn.dataset.peserta);
             });
         });
     }

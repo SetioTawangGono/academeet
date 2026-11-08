@@ -499,7 +499,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
         </form>
 
         <?php
-        $sql_tiket = "SELECT s.id_seminar, s.judul, s.tanggal, s.pemateri, s.status AS status_seminar, s.jam_mulai, s.jam_selesai, s.lokasi, s.link_online, s.kategori, s.deskripsi, r.id_registrasi, r.kode_tiket, r.status_hadir
+        $sql_tiket = "SELECT s.id_seminar, s.judul, s.tanggal, s.pemateri, s.status AS status_seminar, s.jam_mulai, s.jam_selesai, s.lokasi, s.link_online, s.kategori, s.deskripsi, s.jadwal_diubah_at, r.id_registrasi, r.kode_tiket, r.status_hadir
             FROM registrations r JOIN seminars s ON r.id_seminar = s.id_seminar
             WHERE r.id_user = ?";
         $params_tiket = [$id_user];
@@ -544,6 +544,17 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                             <span class="small text-muted fw-semibold"><i class="bi bi-calendar3 me-1"></i> <?= e(date('d M Y', strtotime($t['tanggal']))) ?></span>
                         </div>
                         <h3 class="h6 fw-bold text-dark mb-2 text-truncate-2" style="min-height: 48px; line-height: 1.5;"><?= e($t['judul']) ?></h3>
+                        <?php
+                        $t_jadwal_diubah = !empty($t['jadwal_diubah_at'])
+                            && ($t['status_seminar'] ?? '') === 'Aktif'
+                            && (string) $t['tanggal'] >= date('Y-m-d');
+                        ?>
+                        <?php if ($t_jadwal_diubah): ?>
+                            <div class="alert alert-warning py-2 px-3 small mb-2 d-flex align-items-start gap-2" role="status">
+                                <i class="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true"></i>
+                                <span>Jadwal diperbarui pada <?= e(date('d M Y H:i', strtotime($t['jadwal_diubah_at']))) ?>. Periksa detail terbaru dan unduh ulang kalender.</span>
+                            </div>
+                        <?php endif; ?>
                         <div class="small text-muted mb-3">
                             <i class="bi bi-person-fill text-primary me-2"></i><?= e($t['pemateri']) ?>
                         </div>
