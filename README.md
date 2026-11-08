@@ -2,7 +2,7 @@
 
 **Portal Seminar & Event Kampus** — sistem manajemen seminar berbasis web dengan dua peran: **Admin** (pengelola) dan **Mahasiswa** (peserta).
 
-PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF**, QR dibuat di browser dengan **qrcodejs**.
+PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL verifikasi, QR tiket dibuat di browser dengan **qrcodejs**, dan unduh jadwal `.ics` (RFC 5545).
 
 ---
 
@@ -21,15 +21,16 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF**, QR dibuat d
 | `lupa_password.php` | F5: form permintaan tautan reset (respons generik, throttle per email/IP). |
 | `reset_password.php` | F5: halaman set password baru dari token (sekali pakai, 30 menit). |
 | `mailer.php` | F5: kirim email via PHPMailer (`kirim_email()`, `isi_email_reset()`), konfigurasi dari env SMTP. |
-| `sertifikat.php` | Preview & unduh sertifikat PDF (hanya jika `status_hadir='Hadir'`). |
+| `sertifikat.php` | Preview & unduh sertifikat PDF (hanya jika `status_hadir='Hadir'`). Menyertakan URL verifikasi keaslian (F7). |
 | `verifikasi.php` | Halaman publik verifikasi sertifikat berdasarkan kode tiket (throttle DB per IP + sesi). |
+| `kalender.php` | Unduh `.ics` satu registrasi milik user (`?id=<id_registrasi>`, mahasiswa, owner-only) untuk "Tambah ke kalender". |
 | `export_excel.php` | Ekspor peserta per seminar ke `.xls` (admin-only). |
 | `fpdf.php` | Library FPDF. |
 | `vendor/phpmailer/` | PHPMailer 7.1.1 (vendored, lihat `vendor/phpmailer/README.md`). |
 | `database.sql` | Skema lengkap untuk instalasi baru (+ index & foreign key). |
 | `migrasi.sql` | Migrasi idempoten untuk database yang sudah berjalan. |
 | `tests/run.php` | Self-check helper tanpa dependency (`php tests/run.php`). |
-| `tests/run_db.php` | Tes fungsi DB `services.php`. **Hanya** untuk database bernama `*_test` (mis. `academeet_paketb_test`); menolak berjalan di DB lain. |
+| `tests/run_db.php` | Tes fungsi DB `services.php` (termasuk detail seminar, filter katalog, `.ics`). **Hanya** untuk database bernama `*_test` (mis. `academeet_paketc_test`); menolak berjalan di DB lain. |
 | `tools/tutup_seminar.php` | CLI: tandai seminar `Aktif` yang tanggalnya lewat menjadi `Selesai`. |
 | `tools/buat_admin.php` | CLI: buat akun admin (nama/email argumen/prompt, password prompt tersembunyi). |
 | `uploads/.htaccess` | Blokir eksekusi skrip & directory listing di folder upload. |
@@ -69,6 +70,22 @@ Batasan penting:
 
 Kolom `kuota_total` (di `seminars`) menyimpan kuota awal/total; kolom `kuota` menyimpan sisa kursi. Migrasi mengisinya dengan `kuota + jumlah pendaftar`. Bila ada NIM ganda, migrasi menampilkan `PERINGATAN: NIM ganda, UNIQUE tidak ditambahkan` dan melewati pembuatan indeks unik (tanpa mengubah data NIM).
 
+### Detail seminar (Paket C)
+
+`migrasi.sql` / `database.sql` menambahkan kolom detail ke `seminars` (semua opsional kecuali `kategori`; tanpa tabel baru):
+
+| Kolom | Tipe | Catatan |
+|-------|------|---------|
+| `jam_mulai` | `TIME NULL` | Waktu mulai (zona Asia/Jakarta). |
+| `jam_selesai` | `TIME NULL` | Waktu selesai; bila kosong ICS memakai mulai + 2 jam. |
+| `lokasi` | `VARCHAR(150) NULL` | Lokasi fisik. |
+| `link_online` | `VARCHAR(255) NULL` | Tautan acara daring. **Hanya** tampil di tiket peserta terdaftar (katalog hanya menampilkan badge "Online"). |
+| `kategori` | `VARCHAR(30) NOT NULL DEFAULT 'Umum'` | Salah satu dari: Teknologi, Karier, Riset, Soft Skill, Kewirausahaan, Umum. |
+| `deskripsi` | `TEXT NULL` | Ringkasan acara (maks 2000 karakter). |
+| `idx_seminars_kategori` | index | Mempercepat filter katalog per kategori. |
+
+Seminar lama otomatis menjadi `kategori='Umum'`, kolom lain `NULL`. Daftar kategori resmi di `kategori_seminar()`; nilai di luar daftar ditolak `validasi_detail_seminar()`.
+
 ### Kredensial database
 
 `koneksi.php` membaca environment variable berikut (default untuk XAMPP):
@@ -86,7 +103,7 @@ Kolom `kuota_total` (di `seminars`) menyimpan kuota awal/total; kolom `kuota` me
 |-----|---------|--------|
 | `ACADEMEET_IDLE_ADMIN_MIN` | `60` | Timeout tidak aktif sesi admin (menit). |
 | `ACADEMEET_IDLE_USER_MIN` | `240` | Timeout tidak aktif sesi mahasiswa (menit). |
-| `ACADEMEET_BASE_URL` | *(wajib untuk F5)* | Basis URL absolut untuk tautan reset (mis. `http://localhost/academeet`). Tautan **tidak** dibangun dari header `Host`. |
+| `ACADEMEET_BASE_URL` | *(wajib untuk F5 & F7)* | Basis URL absolut untuk tautan reset **dan** URL verifikasi di sertifikat (mis. `http://localhost/academeet`). Tautan **tidak** dibangun dari header `Host`. |
 | `ACADEMEET_SMTP_HOST` | *(wajib untuk F5)* | Host SMTP (mis. `sandbox.smtp.mailtrap.io`). |
 | `ACADEMEET_SMTP_PORT` | `587` | Port SMTP. |
 | `ACADEMEET_SMTP_SECURE` | `tls` | Enkripsi: `tls` / `ssl` / *(kosong)*. |
@@ -135,9 +152,9 @@ ACADEMEET_SMTP_PASS=isi-dari-mailtrap
 
 | Parameter | Fitur |
 |-----------|-------|
-| `dashboard` | Statistik + daftar seminar (search & pagination server-side), aksi Edit/Selesai/Hapus. Status efektif: seminar bertanggal lampau dianggap Selesai dan tidak bisa diedit. |
-| `tambah` | Tambah seminar: judul, pemateri, tanggal, kuota, poster. |
-| `edit_seminar` | Edit seminar (hanya untuk seminar efektif Aktif). Kuota adalah **kuota total**; sisa = total − jumlah pendaftar, total tidak boleh kurang dari jumlah pendaftar. Poster baru opsional. |
+| `dashboard` | Statistik + daftar seminar (search & pagination server-side), aksi Edit/Selesai/Hapus. Status efektif: seminar bertanggal lampau dianggap Selesai dan tidak bisa diedit. Kolom Kategori + jam ditampilkan. |
+| `tambah` | Tambah seminar: judul, pemateri, tanggal, jam mulai/selesai, kategori, lokasi, link online, deskripsi, kuota, poster. |
+| `edit_seminar` | Edit seminar (hanya untuk seminar efektif Aktif). Kuota adalah **kuota total**; sisa = total − jumlah pendaftar, total tidak boleh kurang dari jumlah pendaftar. Detail (jam/kategori/lokasi/link/deskripsi) dapat diisi atau dikosongkan. Poster baru opsional. |
 | `scan` | Check-in via kode tiket (manual atau scan kamera). Idempoten: tiket yang sudah hadir ditolak. |
 | `mahasiswa` | Daftar mahasiswa (search & pagination), detail, hapus. |
 | `detail_mahasiswa` | Profil, statistik, riwayat tiket, reset password. |
@@ -155,8 +172,8 @@ Penghapusan berjalan dalam transaksi:
 
 | Parameter | Fitur |
 |-----------|-------|
-| `katalog` | Seminar aktif (`status='Aktif'`, tanggal belum lewat) + label "terisi/total" & badge "Penuh"; tombol daftar nonaktif saat kuota habis. |
-| `tiket` | Tiket + QR, status kehadiran, unduh sertifikat bila sudah hadir, tombol **Batalkan** (seminar Aktif, tanggal > hari ini, tiket Belum Hadir). |
+| `katalog` | Seminar aktif (`status='Aktif'`, tanggal belum lewat) + label "terisi/total" & badge "Penuh"; tombol daftar nonaktif saat kuota habis. Panel filter: kata kunci (judul/pemateri), kategori, rentang tanggal (`dari`/`sampai`), ketersediaan (masih tersedia/penuh), urutan; hasil dipaginasi server-side (9/halaman). Kategori & jam & lokasi/Online ditampilkan di kartu. |
+| `tiket` | Tiket + QR, status kehadiran, unduh sertifikat bila sudah hadir, tombol **Batalkan** (seminar Aktif, tanggal > hari ini, tiket Belum Hadir), tombol **Tambah ke kalender** (`.ics`) untuk seminar Aktif, dan detail lengkap (kategori, jam, lokasi, deskripsi, tombol tautan online khusus peserta). |
 | `profil` | Edit data diri (validasi sama dengan registrasi), upload foto (JPG/PNG/WebP maks 2MB), ubah password. |
 
 Pendaftaran berjalan atomik (`SELECT ... FOR UPDATE`): kuota, status, tanggal, dan duplikasi dicek di dalam transaksi; kuota dikurangi hanya jika insert berhasil. Pembatalan (`batalkan_pendaftaran()`) juga atomik: baris tiket + seminar dikunci, lalu kuota dikembalikan dengan batas `LEAST(kuota+1, kuota_total)`.
@@ -167,11 +184,11 @@ Check-in hanya bisa pada hari H (zona Asia/Jakarta). Seminar yang tanggalnya sud
 
 ## 🔄 Alur Kerja
 
-1. Admin membuat pemateri, lalu seminar.
+1. Admin membuat pemateri, lalu seminar (termasuk kategori & detail jam/lokasi/deskripsi).
 2. Mahasiswa mendaftar → mendapat kode tiket + QR.
 3. Panitia check-in di menu **Scan** → status `Hadir`.
-4. Mahasiswa mengunduh sertifikat PDF.
-5. Siapa pun dapat memverifikasi sertifikat di `verifikasi.php?kode=ACD-XXXXXX`.
+4. Mahasiswa mengunduh sertifikat PDF; peserta juga dapat menambahkan seminar ke kalender (`.ics`).
+5. Siapa pun dapat memverifikasi sertifikat di `verifikasi.php?kode=ACD-XXXXXX` (URL ini juga tercetak di sertifikat).
 6. Admin mengekspor laporan peserta ke Excel.
 
 ---
@@ -206,7 +223,7 @@ C:\xampp\php\php.exe tests/run.php
 C:\xampp\php\php.exe -l admin.php   # cek sintaks
 
 # Tes fungsi DB — HANYA di database *_test:
-set ACADEMEET_DB_NAME=academeet_paketb_test
+set ACADEMEET_DB_NAME=academeet_paketc_test
 C:\xampp\php\php.exe tests/run_db.php
 ```
 
