@@ -2,7 +2,7 @@
 
 **Portal Seminar & Event Kampus** — sistem manajemen seminar berbasis web dengan dua peran: **Admin** (pengelola) dan **Mahasiswa** (peserta).
 
-PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL verifikasi, QR tiket dibuat di browser dengan **qrcodejs**, ekspor laporan **`.xlsx`/CSV**, grafik dashboard **SVG server-side**, dan email ringan (konfirmasi + pengingat H-1 via CLI) tanpa antrean.
+PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL verifikasi, QR tiket dibuat di browser dengan **qrcodejs**, ekspor laporan **`.xlsx`/CSV**, grafik dashboard **area chart SVG server-side + JS vanilla** (tanpa library/CDN baru), dan email ringan (konfirmasi + pengingat H-1 via CLI) tanpa antrean.
 
 ---
 
@@ -17,6 +17,8 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL v
 | `logout.php` | Hapus session & cookie, redirect ke login. |
 | `koneksi.php` | Koneksi MySQL via env (fallback `localhost`/`root`), charset `utf8mb4`. |
 | `admin.php` | Dashboard admin multi-halaman via `?page=`. |
+| `grafik.php` | Grafik dashboard (F12): helper murni (`serie_harian()`, `monotone_path()` Fritsch–Carlson, `skala_y_ramah()`, `pilih_label_x()`, `nama_bulan_singkat()`) + render `grafik_area_html()` (kartu area bertumpuk) dan `grafik_daftar_html()` (baris ringkas). Tanpa library. |
+| `grafik.js` | Interaksi grafik area (vanilla): dropdown rentang, tooltip lewat `textContent`, titik aktif, tombol panah/Home/End/Esc, `aria-live`. Dimuat `<script src="grafik.js?v=…" defer>`. |
 | `mahasiswa.php` | Portal mahasiswa: katalog, tiket, profil. |
 | `lupa_password.php` | F5: form permintaan tautan reset (respons generik, throttle per email/IP). |
 | `reset_password.php` | F5: halaman set password baru dari token (sekali pakai, 30 menit). |
@@ -85,7 +87,7 @@ Seminar lama otomatis menjadi `kategori='Umum'`, kolom lain `NULL`. Daftar kateg
 | Kolom | Tipe | Catatan |
 |-------|------|---------|
 | `registrations.h1_terkirim_at` | `DATETIME NULL` | Penanda pengingat H-1 sudah dikirim (klaim atomik; di-`NULL`-kan lagi bila kirim gagal atau tanggal seminar berubah). |
-| `registrations.created_at` | `DATETIME NULL DEFAULT CURRENT_TIMESTAMP` | Waktu pendaftaran untuk grafik "Pendaftar per Bulan". **Baris lama dibiarkan `NULL`** (tidak di-backfill); baris baru terisi otomatis. |
+| `registrations.created_at` | `DATETIME NULL DEFAULT CURRENT_TIMESTAMP` | Waktu pendaftaran untuk grafik "Pendaftar Seminar" (per hari). **Baris lama dibiarkan `NULL`** (tidak di-backfill); baris baru terisi otomatis. |
 | `users.notif_email` | `TINYINT(1) NOT NULL DEFAULT 1` | Preferensi pengingat email (checkbox di halaman profil). Hanya memengaruhi pengingat H-1; email konfirmasi tetap dikirim. |
 | `seminars.jadwal_diubah_at` | `DATETIME NULL` | Diisi saat jadwal (tanggal/jam/lokasi/link) berubah → pita "Jadwal diperbarui" di tiket peserta. |
 
@@ -191,7 +193,7 @@ Catatan:
 
 | Parameter | Fitur |
 |-----------|-------|
-| `dashboard` | Statistik + **3 grafik SVG** server-side (Pendaftar per Bulan 12 bulan terakhir, Tingkat Kehadiran per Seminar, 5 Seminar Terpopuler; dark mode via token tema, tiap grafik punya `role="img"` + `<details>` data angka) + daftar seminar (search & pagination server-side), aksi Edit/Selesai/Hapus. Status efektif: seminar bertanggal lampau dianggap Selesai dan tidak bisa diedit. Kolom Kategori + jam ditampilkan. |
+| `dashboard` | Statistik + **grafik area interaktif** "Pendaftar Seminar" (per hari, dua seri bertumpuk Hadir/Belum hadir, rentang 90/30/7 hari lewat dropdown, tooltip & keyboard, `<details>` data angka) + dua kartu ringkas baris HTML/CSS (Tingkat Kehadiran per Seminar, 5 Seminar Terpopuler) + daftar seminar (search & pagination server-side), aksi Edit/Selesai/Hapus. Grafik dirender server-side sebagai SVG+HTML (tanpa React/Tailwind/recharts/Chart.js/CDN baru); interaksi lewat `grafik.js` vanilla. Tiap grafik punya `role="group"` + wilayah `aria-live`. Status efektif: seminar bertanggal lampau dianggap Selesai dan tidak bisa diedit. Kolom Kategori + jam ditampilkan. |
 | `tambah` | Tambah seminar: judul, pemateri, tanggal, jam mulai/selesai, kategori, lokasi, link online, deskripsi, kuota, poster. |
 | `edit_seminar` | Edit seminar (hanya untuk seminar efektif Aktif). Kuota adalah **kuota total**; sisa = total − jumlah pendaftar, total tidak boleh kurang dari jumlah pendaftar. Detail (jam/kategori/lokasi/link/deskripsi) dapat diisi atau dikosongkan. Bila tanggal/jam/lokasi/link berubah, `jadwal_diubah_at` diisi (pita di tiket peserta) dan `h1_terkirim_at` direset saat tanggal berubah. Poster baru opsional. |
 | `scan` | Check-in via kode tiket (manual atau scan kamera). Idempoten: tiket yang sudah hadir ditolak. |
