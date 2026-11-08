@@ -243,3 +243,47 @@ SET @sql := IF(@exists = 0,
     'ALTER TABLE seminars ADD COLUMN jadwal_diubah_at DATETIME NULL',
     'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- Paket E1: operasional admin (check-in manual, panitia, impor, ttd sertifikat)
+-- ============================================================
+
+-- F13: waktu check-in (scanner & manual). Baris lama dibiarkan NULL.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'registrations' AND column_name = 'checkin_at');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE registrations ADD COLUMN checkin_at DATETIME NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- F15/F16: wajib ganti password saat login pertama.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'wajib_ganti_password');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE users ADD COLUMN wajib_ganti_password TINYINT(1) NOT NULL DEFAULT 0',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- F15: tambah nilai 'panitia' pada users.role (hanya bila belum ada; atribut lain dipertahankan).
+SET @sql := IF(
+    (SELECT column_type FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'role') NOT LIKE '%panitia%',
+    "ALTER TABLE users MODIFY role ENUM('admin','mahasiswa','panitia') NOT NULL DEFAULT 'mahasiswa'",
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- F18: nama penandatangan sertifikat per seminar.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'ttd_nama');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN ttd_nama VARCHAR(100) NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- F18: jabatan penandatangan sertifikat per seminar.
+SET @exists := (SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'seminars' AND column_name = 'ttd_jabatan');
+SET @sql := IF(@exists = 0,
+    'ALTER TABLE seminars ADD COLUMN ttd_jabatan VARCHAR(100) NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
