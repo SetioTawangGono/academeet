@@ -583,6 +583,151 @@ try {
     $check('jumlah peserta terdampak benar', $cDampak === 3);
     $cKosong = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $idSemJ2"))['c'];
     $check('jumlah peserta terdampak 0 jika tak ada', $cKosong === 0);
+
+    // ===== Paket E1: checkin_manual =====
+    $idSemE1Hari = ins_seminar($conn, 'E1 HariIni ' . $tag, $hariIni, 20);
+    $idSemE1Besok = ins_seminar($conn, 'E1 Besok ' . $tag, $besok, 20);
+    $idSemE1Kemarin = ins_seminar($conn, 'E1 Kemarin ' . $tag, $kemarin, 20);
+    $idSemE1Selesai = ins_seminar($conn, 'E1 Selesai ' . $tag, $hariIni, 20, 'Selesai');
+    $idUE1 = ins_user($conn, 'E1 U ' . $tag, "e1u{$tag}@test.local");
+    $idUE1Lain = ins_user($conn, 'E1 U Lain ' . $tag, "e1ul{$tag}@test.local");
+
+    // Sukses di hari H + checkin_at terisi.
+    $regE1 = ins_reg($conn, $idUE1, $idSemE1Hari, 'Belum Hadir', 'E1-' . $tag . '-1');
+    [$t, ] = checkin_manual($conn, $regE1, $idSemE1Hari);
+    $rowE1 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT status_hadir, checkin_at FROM registrations WHERE id_registrasi=$regE1"));
+    $check('checkin_manual sukses di hari H', $t === 'success');
+    $check('checkin_manual mengisi checkin_at', $rowE1['status_hadir'] === 'Hadir' && $rowE1['checkin_at'] !== null);
+
+    // Sudah Hadir -> ditolak.
+    [$t, ] = checkin_manual($conn, $regE1, $idSemE1Hari);
+    $check('checkin_manual ditolak bila sudah Hadir', $t === 'danger');
+
+    // Registrasi bukan milik seminar halaman -> ditolak.
+    $regE1Lain = ins_reg($conn, $idUE1, $idSemE1Besok, 'Belum Hadir', 'E1-' . $tag . '-2');
+    [$t, ] = checkin_manual($conn, $regE1Lain, $idSemE1Hari);
+    $check('checkin_manual tolak registrasi bukan milik seminar halaman', $t === 'danger');
+
+    // Seminar besok -> ditolak.
+    [$t, ] = checkin_manual($conn, $regE1Lain, $idSemE1Besok);
+    $check('checkin_manual tolak seminar besok', $t === 'danger');
+
+    // Seminar kemarin -> ditolak.
+    $regE1Kem = ins_reg($conn, $idUE1, $idSemE1Kemarin, 'Belum Hadir', 'E1-' . $tag . '-3');
+    [$t, ] = checkin_manual($conn, $regE1Kem, $idSemE1Kemarin);
+    $check('checkin_manual tolak seminar kemarin', $t === 'danger');
+
+    // Seminar Selesai -> ditolak.
+    $regE1Sel = ins_reg($conn, $idUE1, $idSemE1Selesai, 'Belum Hadir', 'E1-' . $tag . '-4');
+    [$t, ] = checkin_manual($conn, $regE1Sel, $idSemE1Selesai);
+    $check('checkin_manual tolak seminar Selesai', $t === 'danger');
+
+    // ===== Paket E1: batalkan_checkin =====
+    $kuotaSebelum = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT kuota FROM seminars WHERE id_seminar=$idSemE1Hari"))['kuota'];
+    [$t, ] = batalkan_checkin($conn, $regE1, $idSemE1Hari);
+    $rowE1b = mysqli_fetch_assoc(mysqli_query($conn, "SELECT status_hadir, checkin_at FROM registrations WHERE id_registrasi=$regE1"));
+    $kuotaSesudah = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT kuota FROM seminars WHERE id_seminar=$idSemE1Hari"))['kuota'];
+    $check('batalkan_checkin sukses di hari H', $t === 'success');
+    $check('batalkan_checkin mengosongkan status + checkin_at', $rowE1b['status_hadir'] === 'Belum Hadir' && $rowE1b['checkin_at'] === null);
+    $check('batalkan_checkin tidak mengubah kuota', $kuotaSesudah === $kuotaSebelum);
+
+    // Belum Hadir -> ditolak.
+    [$t, ] = batalkan_checkin($conn, $regE1, $idSemE1Hari);
+    $check('batalkan_checkin tolak yang belum Hadir', $t === 'danger');
+
+    // Seminar efektif Selesai -> ditolak walau status Hadir.
+    $regE1Sel2 = ins_reg($conn, $idUE1Lain, $idSemE1Selesai, 'Hadir', 'E1-' . $tag . '-5');
+    mysqli_query($conn, "UPDATE registrations SET checkin_at = NOW() WHERE id_registrasi=$regE1Sel2");
+    [$t, ] = batalkan_checkin($conn, $regE1Sel2, $idSemE1Selesai);
+    $check('batalkan_checkin tolak seminar efektif Selesai', $t === 'danger');
+
+    // Registrasi bukan milik seminar halaman -> ditolak.
+    ins_reg($conn, $idUE1Lain, $idSemE1Besok, 'Hadir', 'E1-' . $tag . '-6');
+    $regE1B = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT id_registrasi FROM registrations WHERE kode_tiket='E1-" . $tag . "-6'"))['id_registrasi'];
+    [$t, ] = batalkan_checkin($conn, $regE1B, $idSemE1Hari);
+    $check('batalkan_checkin tolak registrasi bukan milik seminar halaman', $t === 'danger');
+
+    // ===== Paket E1: scanner tetap isi checkin_at (via pola UPDATE handleCheckin) =====
+    $regScan = ins_reg($conn, $idUE1Lain, $idSemE1Hari, 'Belum Hadir', 'E1-' . $tag . '-S');
+    $stmt = mysqli_prepare($conn, "UPDATE registrations SET status_hadir = 'Hadir', checkin_at = NOW() WHERE kode_tiket = ? AND status_hadir = 'Belum Hadir'");
+    $kt = 'E1-' . $tag . '-S';
+    mysqli_stmt_bind_param($stmt, 's', $kt);
+    mysqli_stmt_execute($stmt);
+    $aff = mysqli_stmt_affected_rows($stmt);
+    mysqli_stmt_close($stmt);
+    $rowScan = mysqli_fetch_assoc(mysqli_query($conn, "SELECT status_hadir, checkin_at FROM registrations WHERE id_registrasi=$regScan"));
+    $check('scanner update mengisi checkin_at', $aff === 1 && $rowScan['checkin_at'] !== null);
+    // Ulang -> 0 affected (sudah Hadir).
+    $stmt = mysqli_prepare($conn, "UPDATE registrations SET status_hadir = 'Hadir', checkin_at = NOW() WHERE kode_tiket = ? AND status_hadir = 'Belum Hadir'");
+    mysqli_stmt_bind_param($stmt, 's', $kt);
+    mysqli_stmt_execute($stmt);
+    $aff2 = mysqli_stmt_affected_rows($stmt);
+    mysqli_stmt_close($stmt);
+    $check('scanner update ulang tidak mengubah (0 affected)', $aff2 === 0);
+
+    // ===== Paket E1: buat_panitia =====
+    $emailPan = "pan{$tag}@test.local";
+    [$t, $msg, $idPan] = buat_panitia($conn, 'Panitia Uji ' . $tag, $emailPan, 'passwordpan10');
+    $check('buat_panitia sukses', $t === 'success' && $idPan > 0);
+    $rowPan = mysqli_fetch_assoc(mysqli_query($conn, "SELECT role, nim, prodi, notif_email, wajib_ganti_password, password FROM users WHERE id_user=" . (int) $idPan));
+    $check('buat_panitia role = panitia', $rowPan['role'] === 'panitia');
+    $check('buat_panitia nim/prodi NULL', $rowPan['nim'] === null && $rowPan['prodi'] === null);
+    $check('buat_panitia notif_email = 0', (int) $rowPan['notif_email'] === 0);
+    $check('buat_panitia wajib_ganti_password = 1', (int) $rowPan['wajib_ganti_password'] === 1);
+    $check('buat_panitia hash valid', password_verify('passwordpan10', $rowPan['password']));
+
+    [$t, ] = buat_panitia($conn, 'Pan Dua', $emailPan, 'passwordpan10');
+    $check('buat_panitia email duplikat ditolak', $t === 'danger');
+    [$t, ] = buat_panitia($conn, 'Pan Tiga', "pan3{$tag}@test.local", 'pendek9ch');
+    $check('buat_panitia password < 10 ditolak', $t === 'danger');
+
+    // ===== Paket E1: reset_password_panitia hanya role panitia =====
+    $avPanBefore = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user=" . (int) $idPan))['auth_version'];
+    [$t, ] = reset_password_panitia($conn, (int) $idPan, 'passwordbaru10');
+    $rowPan2 = mysqli_fetch_assoc(mysqli_query($conn, "SELECT password, wajib_ganti_password, auth_version FROM users WHERE id_user=" . (int) $idPan));
+    $check('reset_password_panitia sukses + wajib_ganti_password=1', $t === 'success' && (int) $rowPan2['wajib_ganti_password'] === 1);
+    $check('reset_password_panitia naikkan auth_version + ganti hash', (int) $rowPan2['auth_version'] === $avPanBefore + 1 && password_verify('passwordbaru10', $rowPan2['password']));
+    // Target bukan panitia (mahasiswa) -> tidak mengubah apa pun.
+    $mhsHashBefore = mysqli_fetch_assoc(mysqli_query($conn, "SELECT password, auth_version FROM users WHERE id_user=$idUser"));
+    [$t, ] = reset_password_panitia($conn, $idUser, 'passwordbaru10');
+    $mhsHashAfter = mysqli_fetch_assoc(mysqli_query($conn, "SELECT password, auth_version FROM users WHERE id_user=$idUser"));
+    $check('reset_password_panitia tolak non-panitia (tidak berubah)', $t === 'danger' && $mhsHashAfter['password'] === $mhsHashBefore['password'] && (int) $mhsHashAfter['auth_version'] === (int) $mhsHashBefore['auth_version']);
+
+    // ===== Paket E1: hapus_panitia hanya role panitia =====
+    $idPanHapus = 0;
+    [, , $idPanHapus] = buat_panitia($conn, 'Pan Hapus ' . $tag, "panh{$tag}@test.local", 'passwordpan10');
+    [$t, ] = hapus_panitia($conn, $idUser); // mahasiswa
+    $check('hapus_panitia tolak non-panitia', $t === 'danger' && mysqli_fetch_assoc(mysqli_query($conn, "SELECT id_user FROM users WHERE id_user=$idUser")) !== null);
+    [$t, ] = hapus_panitia($conn, (int) $idPanHapus);
+    $check('hapus_panitia sukses + baris hilang', $t === 'success' && mysqli_fetch_assoc(mysqli_query($conn, "SELECT id_user FROM users WHERE id_user=" . (int) $idPanHapus)) === null);
+
+    // ===== Paket E1: ganti_password_wajib =====
+    // Password baru sama dengan lama -> ditolak.
+    [, , $idGP] = buat_panitia($conn, 'Pan GP ' . $tag, "pangp{$tag}@test.local", 'passwordlama10');
+    [$t, ] = ganti_password_wajib($conn, (int) $idGP, 'panitia', 'passwordlama10', 'passwordlama10');
+    $check('ganti_password_wajib tolak sama dengan lama', $t === 'danger');
+    // Konfirmasi beda -> ditolak.
+    [$t, ] = ganti_password_wajib($conn, (int) $idGP, 'panitia', 'passwordbaru10', 'passwordlain');
+    $check('ganti_password_wajib tolak konfirmasi beda', $t === 'danger');
+    // Sukses: flag turun, auth_version naik.
+    $avGPBefore = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT auth_version FROM users WHERE id_user=" . (int) $idGP))['auth_version'];
+    [$t, ] = ganti_password_wajib($conn, (int) $idGP, 'panitia', 'passwordbaru10', 'passwordbaru10');
+    $rowGP = mysqli_fetch_assoc(mysqli_query($conn, "SELECT password, wajib_ganti_password, auth_version FROM users WHERE id_user=" . (int) $idGP));
+    $check('ganti_password_wajib sukses turunkan flag', $t === 'success' && (int) $rowGP['wajib_ganti_password'] === 0);
+    $check('ganti_password_wajib naikkan auth_version', (int) $rowGP['auth_version'] === $avGPBefore + 1);
+    $check('ganti_password_wajib hash baru valid', password_verify('passwordbaru10', $rowGP['password']));
+
+    // ===== Paket E1: pakai_token_reset turunkan wajib_ganti_password =====
+    $idUFlag = ins_user($conn, 'E1 Flag ' . $tag, "e1flag{$tag}@test.local");
+    mysqli_query($conn, "UPDATE users SET wajib_ganti_password = 1 WHERE id_user=$idUFlag");
+    $tokFlag = buat_token_reset($conn, $idUFlag);
+    pakai_token_reset($conn, $tokFlag, 'passwordbaru8');
+    $flagAfter = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT wajib_ganti_password FROM users WHERE id_user=$idUFlag"))['wajib_ganti_password'];
+    $check('pakai_token_reset turunkan wajib_ganti_password', $flagAfter === 0);
+
+    // ===== Paket E1: query mahasiswa tidak menyertakan panitia =====
+    $cMhs = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM users WHERE role='mahasiswa' AND email='{$emailPan}'"))['c'];
+    $check('query role=mahasiswa tidak hitung panitia', $cMhs === 0);
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";

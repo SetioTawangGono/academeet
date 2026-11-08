@@ -695,6 +695,9 @@ function checkin_manual(mysqli $conn, int $idRegistrasi, int $idSeminarHalaman):
         if ($row['status'] !== 'Aktif') {
             throw new RuntimeException('Seminar ini sudah ditutup. Check-in tidak dapat dilakukan.');
         }
+        if ((string) $row['tanggal'] !== date('Y-m-d')) {
+            throw new RuntimeException('Check-in hanya dapat dilakukan pada hari seminar.');
+        }
         $jendela = checkin_window_error((string) $row['tanggal'], date('Y-m-d'));
         if ($jendela !== null) {
             throw new RuntimeException($jendela);
