@@ -122,6 +122,24 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
     $pdf->SetXY(187, $y_ttd + 22);
     $pdf->Cell(70, 6, pdf_text($data['pemateri']), 0, 1, 'C');
 
+    // F7: URL verifikasi keaslian sertifikat.
+    // Tanpa QR (lib QR server-side belum ada); URL + kode dicetak sebagai teks.
+    $base = trim(env_secret('ACADEMEET_BASE_URL'));
+    $kode_tiket = (string) $data['kode_tiket'];
+    if ($base !== '') {
+        $url_verif = rtrim($base, '/') . '/verifikasi.php?kode=' . rawurlencode($kode_tiket);
+    } else {
+        $url_verif = 'verifikasi.php?kode=' . $kode_tiket;
+        error_log('ACADEMEET_BASE_URL belum diset; URL verifikasi sertifikat tidak absolut.');
+    }
+    $pdf->SetFont('Arial', '', 7);
+    $pdf->SetTextColor($c_muted[0], $c_muted[1], $c_muted[2]);
+    $pdf->SetXY(187, $y_ttd + 34);
+    $pdf->Cell(70, 4, 'Verifikasi keaslian:', 0, 1, 'C');
+    $pdf->SetFont('Arial', 'B', 7);
+    $pdf->SetXY(160, $y_ttd + 38);
+    $pdf->MultiCell(124, 3.5, pdf_text($url_verif), 0, 'C');
+
     ob_end_clean();
     $file_name = 'Sertifikat_' . (preg_replace('/[^A-Za-z0-9_-]+/', '_', $nama_mahasiswa) ?: 'peserta') . '.pdf';
     $pdf->Output(isset($_GET['inline']) ? 'I' : 'D', $file_name);
