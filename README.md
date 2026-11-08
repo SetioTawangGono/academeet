@@ -34,6 +34,7 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL v
 | `migrasi.sql` | Migrasi idempoten untuk database yang sudah berjalan (tidak memilih database; sebut nama DB di CLI). |
 | `tests/run.php` | Self-check helper tanpa dependency (`php tests/run.php`). |
 | `tests/run_db.php` | Tes fungsi DB `services.php` (termasuk detail seminar, filter katalog, `.ics`, pengingat H-1, grafik). **Hanya** untuk database bernama `*_test`; menolak berjalan di DB lain. |
+| `tests/smoke_http.php` | Tes asap HTTP end-to-end (menjalankan `php -S`, login peran admin/panitia/mahasiswa, uji handler tulis). **Hanya** untuk database bernama `*_test`. |
 | `tools/tutup_seminar.php` | CLI: tandai seminar `Aktif` yang tanggalnya lewat menjadi `Selesai`. |
 | `tools/pengingat_h1.php` | CLI: kirim pengingat H-1 (email) untuk seminar `Aktif` yang berlangsung besok. CLI-only (ditolak via web). Lihat bagian Email. |
 | `tools/buat_admin.php` | CLI: buat akun admin (nama/email argumen/prompt, password prompt tersembunyi). |
@@ -290,6 +291,9 @@ C:\xampp\php\php.exe -l admin.php   # cek sintaks
 # Tes fungsi DB — HANYA di database *_test:
 set ACADEMEET_DB_NAME=academeet_paketd_test
 C:\xampp\php\php.exe tests/run_db.php
+
+# Tes asap HTTP end-to-end (server php -S + login peran) — HANYA di *_test:
+C:\xampp\php\php.exe tests/smoke_http.php
 ```
 
 `tests/run_db.php` menolak berjalan pada DB yang namanya tidak berakhiran `_test`. Buat salinan dulu (mis. dari dump live), jalankan `migrasi.sql` ke salinan itu (`mysql -u root -D academeet_paketd_test < migrasi.sql`), lalu arahkan `ACADEMEET_DB_NAME` ke salinan itu. Tes membuat lalu membersihkan datanya sendiri (email berakhiran `@test.local`). Pengiriman email di tes memakai **pengirim palsu** (tidak ada email sungguhan terkirim).
