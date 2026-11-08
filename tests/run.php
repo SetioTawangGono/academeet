@@ -198,6 +198,100 @@ $detOk = svg_chart_details([['label' => '<a>', 'nilai' => 3, 'teks' => '3']]);
 $check('svg_chart_details() label di-escape', str_contains($detOk, '&lt;a&gt;'));
 $check('svg_chart_details() pakai <details>', str_contains($detOk, '<details'));
 
+// --- Grafik area (F12 revisi): helper murni di grafik.php ---
+require __DIR__ . '/../grafik.php';
+
+// serie_harian: isi hari kosong 0, urut kronologis, batas rentang tepat.
+$serie = serie_harian([
+    ['d' => '2026-11-03', 'status_hadir' => 'Hadir', 'c' => 2],
+    ['d' => '2026-11-03', 'status_hadir' => 'Belum Hadir', 'c' => 1],
+    ['d' => '2026-11-05', 'status_hadir' => 'Belum Hadir', 'c' => 4],
+], '2026-11-01', 7);
+$check('serie_harian: jumlah hari tepat', count($serie) === 7);
+$check('serie_harian: hari pertama = 2026-11-01', $serie[0]['tanggal'] === '2026-11-01');
+$check('serie_harian: hari terakhir = 2026-11-07', $serie[6]['tanggal'] === '2026-11-07');
+$check('serie_harian: hari kosong terisi 0', $serie[1]['hadir'] === 0 && $serie[1]['belum'] === 0);
+$check('serie_harian: hari berisi terpisah Hadir/Belum', $serie[2]['hadir'] === 2 && $serie[2]['belum'] === 1);
+$check('serie_harian: urut kronologis', $serie[0]['tanggal'] < $serie[6]['tanggal']);
+$check('serie_harian: 1 hari tetap 1 baris', count(serie_harian([], '2026-11-01', 1)) === 1);
+
+// skala_y_ramah.
+$check('skala_y_ramah(0)=5', skala_y_ramah(0) === 5);
+$check('skala_y_ramah(1)=5', skala_y_ramah(1) === 5);
+$check('skala_y_ramah(7)=10', skala_y_ramah(7) === 10);
+$check('skala_y_ramah(10)=10', skala_y_ramah(10) === 10);
+$check('skala_y_ramah(101)=200', skala_y_ramah(101) === 200);
+$check('skala_y_ramah tak pernah 0', skala_y_ramah(-5) !== 0);
+
+// pilih_label_x.
+$label7 = pilih_label_x(7, 9);
+$check('pilih_label_x(7)=semua 7', $label7 === [0, 1, 2, 3, 4, 5, 6]);
+$label90 = pilih_label_x(90, 9);
+$check('pilih_label_x(90) memuat titik awal', $label90[0] === 0);
+$check('pilih_label_x(90) memuat titik akhir', end($label90) === 89);
+$check('pilih_label_x(90) jumlah <= 9', count($label90) <= 9);
+$check('pilih_label_x(90) tanpa duplikat & urut naik', $label90 === array_values(array_unique($label90)) && $label90 === array_values($label90) && (function () use ($label90) {
+    for ($i = 1; $i < count($label90); $i++) { if ($label90[$i] <= $label90[$i - 1]) { return false; } }
+    return true;
+})());
+$check('pilih_label_x(0)=[]', pilih_label_x(0, 9) === []);
+$check('pilih_label_x(1)=[0]', pilih_label_x(1, 9) === [0]);
+
+// monotone_path: aman dari NaN/INF, lewat titik awal/akhir, 1 titik & datar aman.
+$mp1 = monotone_path([[0, 100]]);
+$check('monotone_path 1 titik -> M', str_starts_with($mp1, 'M ') && !str_contains($mp1, 'NaN'));
+$mpDatar = monotone_path([[0, 50], [50, 50], [100, 50]]);
+$check('monotone_path data datar -> tanpa NaN/INF', !str_contains($mpDatar, 'NaN') && !str_contains($mpDatar, 'INF'));
+$mpKosong = monotone_path([]);
+$check('monotone_path kosong -> string kosong', $mpKosong === '');
+$mp = monotone_path([[0, 200], [100, 100], [200, 150], [300, 20]]);
+$check('monotone_path tanpa NaN/INF', !preg_match('/NaN|INF|inf/', $mp));
+$check('monotone_path mulai di titik awal', str_starts_with($mp, 'M 0 200'));
+$check('monotone_path berakhir di titik akhir', str_ends_with($mp, '300 20'));
+// Tidak turun di bawah nilai minimum data (y SVG: makin besar makin rendah; min data y=20).
+preg_match_all('/-?\d+(?:\.\d+)?/', $mp, $angka);
+$ys = [];
+foreach ($angka[0] as $i => $v) {
+    if ($i % 2 === 1) { $ys[] = (float) $v; } // koordinat y = elemen indeks ganjil
+}
+$check('monotone_path tak melewati batas (y <= max)', !empty($ys) && max($ys) <= 200.001);
+
+// nama_bulan_singkat.
+$check('nama_bulan_singkat(11)=Nov', nama_bulan_singkat(11) === 'Nov');
+$check('nama_bulan_singkat(1)=Jan', nama_bulan_singkat(1) === 'Jan');
+
+// grafik_area_html: well-formed, escape, keadaan kosong tanpa path.
+$sKosong = serie_harian([], '2026-11-01', 7);
+$gk = grafik_area_html($sKosong, $sKosong, $sKosong, 0);
+$check('grafik_area_html: keadaan kosong -> pesan', str_contains($gk, 'Belum ada pendaftaran'));
+$check('grafik_area_html: keadaan kosong tanpa <path', !str_contains($gk, '<path'));
+$check('grafik_area_html: ada dropdown rentang', str_contains($gk, 'data-rentang'));
+$check('grafik_area_html: tiga panel', substr_count($gk, 'paketd-chart-panel') >= 3);
+$check('grafik_area_html: legend hadir & belum hadir', str_contains($gk, 'Belum hadir') && str_contains($gk, '>Hadir<'));
+
+$sIsi = serie_harian([
+    ['d' => '2026-11-02', 'status_hadir' => 'Hadir', 'c' => 3],
+    ['d' => '2026-11-04', 'status_hadir' => 'Belum Hadir', 'c' => 2],
+], '2026-11-01', 7);
+$gi = grafik_area_html($sIsi, $sIsi, $sIsi, 5);
+$check('grafik_area_html: ada tiga <svg', substr_count($gi, '<svg') === 3);
+$check('grafik_area_html: ada path area', str_contains($gi, '<path'));
+$check('grafik_area_html: token warna --chart-1/2', str_contains($gi, 'var(--chart-1)') && str_contains($gi, 'var(--chart-2)'));
+$check('grafik_area_html: catatan tanpa waktu', str_contains($gi, 'pendaftaran lama tanpa catatan waktu'));
+// SVG di dalam kartu well-formed (potong per blok <svg>...</svg>).
+preg_match('#<svg\b.*?</svg>#s', $gi, $mSvg);
+$check('grafik_area_html: SVG well-formed', isset($mSvg[0]) && (bool) @simplexml_load_string($mSvg[0]));
+// Tidak ada <text> di dalam SVG (teks lewat HTML).
+$check('grafik_area_html: tanpa <text> di dalam SVG', !str_contains($mSvg[0], '<text'));
+// Escape: judul dari DB.
+$sJahat = serie_harian([], '2026-11-01', 3);
+$gEsc = grafik_daftar_html([['judul' => '<img src=x onerror=alert(1)>', 'nilai' => 1, 'maks' => 1, 'teks' => '1']]);
+$check('grafik_daftar_html: judul di-escape', str_contains($gEsc, '&lt;img') && !str_contains($gEsc, '<img '));
+$check('grafik_daftar_html: judul lengkap di atribut title', str_contains($gEsc, 'title="&lt;img'));
+$check('grafik_daftar_html: kosong -> pesan', str_contains(grafik_daftar_html([]), 'Belum ada data'));
+$gNum = grafik_daftar_html([['judul' => 'A', 'nilai' => 1, 'maks' => 2, 'teks' => '1', 'nomor' => 1, 'sub' => '1 dari 2 terdaftar hadir']]);
+$check('grafik_daftar_html: nomor urut + sub tampil', str_contains($gNum, 'paketd-list-num') && str_contains($gNum, '1 dari 2 terdaftar hadir'));
+
 // --- Email (F6): helper murni, TANPA pengiriman ---
 $semEmail = [
     'judul' => 'Workshop PHP', 'pemateri' => 'Dr. Budi', 'tanggal' => '2026-11-09',
