@@ -163,15 +163,16 @@ function old(string $key, string $default = ''): string
     return isset($_SESSION['_old'][$key]) ? (string) $_SESSION['_old'][$key] : $default;
 }
 
-function require_role(string $role): void
+function require_role($role): void
 {
-    if (($_SESSION['role'] ?? '') !== $role || empty($_SESSION['id_user'])) {
+    $roles = is_array($role) ? $role : [$role];
+    if (!in_array($_SESSION['role'] ?? '', $roles, true) || empty($_SESSION['id_user'])) {
         redirect('index.php');
     }
 
     // Timeout tidak aktif: perbarui penanda, tolak bila sudah lewat batas.
     $now = time();
-    $timeout = idle_timeout_seconds($role);
+    $timeout = idle_timeout_seconds((string) ($_SESSION['role'] ?? ''));
     if (sesi_kedaluwarsa($_SESSION['_last_active'] ?? null, $now, $timeout)) {
         $_SESSION = [];
         session_destroy();
@@ -186,7 +187,7 @@ function require_role(string $role): void
     // per primary key. Fail-closed: kalau koneksi tak terduga, tetap tolak.
     global $conn;
     $stmt = ($conn instanceof mysqli)
-        ? mysqli_prepare($conn, 'SELECT auth_version FROM users WHERE id_user = ? LIMIT 1')
+        ? mysqli_prepare($conn, 'SELECT auth_version, wajib_ganti_password FROM users WHERE id_user = ? LIMIT 1')
         : false;
     if (!$stmt) {
         $_SESSION = [];
@@ -203,6 +204,14 @@ function require_role(string $role): void
         session_start();
         flash_set('warning', 'Sesi tidak berlaku lagi, silakan login ulang.');
         redirect('index.php');
+    }
+
+    // Wajib ganti password: cegat semua halaman kecuali penggantian & logout.
+    if ((int) $row['wajib_ganti_password'] === 1) {
+        $skrip = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($skrip !== 'ganti_password.php' && $skrip !== 'logout.php') {
+            redirect('ganti_password.php');
+        }
     }
 }
 

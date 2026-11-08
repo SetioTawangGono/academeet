@@ -1,12 +1,43 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/koneksi.php';
-require_role('admin');
+require_role(['admin', 'panitia']);
 
-$allowed_pages = ['dashboard', 'tambah', 'edit_seminar', 'scan', 'mahasiswa', 'detail_mahasiswa', 'pemateri', 'tambah_pemateri', 'detail_pemateri', 'laporan'];
+$allowed_pages = ['dashboard', 'tambah', 'edit_seminar', 'scan', 'mahasiswa', 'detail_mahasiswa', 'pemateri', 'tambah_pemateri', 'detail_pemateri', 'laporan', 'peserta', 'panitia', 'impor_mahasiswa'];
 $page = (string) ($_GET['page'] ?? 'dashboard');
 if (!in_array($page, $allowed_pages, true)) {
     $page = 'dashboard';
+}
+
+$role_aktif = (string) ($_SESSION['role'] ?? '');
+
+// ==========================================================
+// DEFAULT DENY untuk panitia: sebelum handler POST/GET apa pun.
+// Halaman & aksi POST yang diizinkan ditentukan oleh helper murni.
+// ==========================================================
+if ($role_aktif === 'panitia') {
+    $aksi_post = '';
+    foreach (['checkin', 'checkin_manual', 'tambah', 'selesai', 'edit_seminar', 'hapus', 'tambah_pemateri', 'hapus_pemateri', 'hapus_mahasiswa', 'reset_password', 'tambah_panitia', 'reset_password_panitia', 'hapus_panitia', 'impor_pratinjau', 'impor_terapkan'] as $kandidat) {
+        if (isset($_POST[$kandidat])) {
+            $aksi_post = $kandidat;
+            break;
+        }
+    }
+    $boleh_halaman = role_boleh_halaman($role_aktif, $page);
+    $boleh_aksi = ($aksi_post === '') || role_boleh_aksi($role_aktif, $aksi_post);
+    if (!$boleh_halaman || !$boleh_aksi) {
+        http_response_code(403);
+        echo '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Akses Ditolak - AcadeMeet</title>'
+            . '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">'
+            . '<link rel="stylesheet" href="style.css?v=2.13"></head><body class="auth-wrapper">'
+            . '<div class="container text-center"><div class="auth-card p-4 p-sm-5 mx-auto" style="max-width:480px;">'
+            . '<div class="auth-brand-icon mx-auto mb-3"><i class="bi bi-shield-exclamation"></i></div>'
+            . '<h1 class="h4 fw-bold text-dark mb-2">Akses ditolak</h1>'
+            . '<p class="text-muted small mb-4">Anda tidak memiliki izin untuk membuka halaman ini.</p>'
+            . '<a href="admin.php?page=scan" class="btn btn-primary"><i class="bi bi-qr-code-scan me-1"></i> Ke Scanner Check-in</a>'
+            . '</div></div></body></html>';
+        exit;
+    }
 }
 
 // Halaman detail butuh id valid sebelum HTML dikirim, supaya redirect benar-benar 302.
@@ -37,6 +68,9 @@ $judul_halaman = [
     'tambah_pemateri' => 'Tambah Pemateri',
     'detail_pemateri' => 'Detail Pemateri',
     'laporan' => 'Laporan',
+    'peserta' => 'Daftar Peserta',
+    'panitia' => 'Data Panitia',
+    'impor_mahasiswa' => 'Impor Mahasiswa',
 ][$page] ?? 'Dashboard';
 
 /** Check-in aman dari double submit. Mengembalikan [tipe, pesan]. */
@@ -522,6 +556,82 @@ if (isset($_POST['reset_password'])) {
     }
     redirect('admin.php?page=detail_mahasiswa&id=' . $id_mhs);
 }
+
+// ==========================================
+// CHECK-IN MANUAL (admin & panitia) dari daftar peserta
+// ==========================================
+if (isset($_POST['checkin_manual'])) {
+    csrf_check();
+    $id_reg = (int) ($_POST['id_registrasi'] ?? 0);
+    $id_sem = (int) ($_POST['id_seminar'] ?? 0);
+    [$type, $message] = checkin_manual($conn, $id_reg, $id_sem);
+    flash_set($type, $message);
+    redirect('admin.php?page=peserta&id=' . $id_sem);
+}
+
+// ==========================================
+// BATALKAN CHECK-IN (HANYA admin) dari daftar peserta
+// ==========================================
+if (isset($_POST['batalkan_checkin'])) {
+    csrf_check();
+    if (($_SESSION['role'] ?? '') !== 'admin') {
+        flash_set('danger', 'Hanya admin yang dapat membatalkan check-in.');
+        redirect('admin.php?page=peserta');
+    }
+    $id_reg = (int) ($_POST['id_registrasi'] ?? 0);
+    $id_sem = (int) ($_POST['id_seminar'] ?? 0);
+    [$type, $message] = batalkan_checkin($conn, $id_reg, $id_sem);
+    flash_set($type, $message);
+    redirect('admin.php?page=peserta&id=' . $id_sem);
+}
+
+// ==========================================
+// TAMBAH PANITIA (HANYA admin)
+// ==========================================
+if (isset($_POST['tambah_panitia'])) {
+    csrf_check();
+    if (($_SESSION['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        exit('Akses ditolak.');
+    }
+    $nama = (string) ($_POST['nama'] ?? '');
+    $email = (string) ($_POST['email'] ?? '');
+    $password = (string) ($_POST['password'] ?? '');
+    [$type, $message] = buat_panitia($conn, $nama, $email, $password);
+    flash_set($type, $message);
+    redirect('admin.php?page=panitia');
+}
+
+// ==========================================
+// RESET PASSWORD PANITIA (HANYA admin)
+// ==========================================
+if (isset($_POST['reset_password_panitia'])) {
+    csrf_check();
+    if (($_SESSION['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        exit('Akses ditolak.');
+    }
+    $id_pan = (int) ($_POST['id_user'] ?? 0);
+    $baru = (string) ($_POST['password_baru'] ?? '');
+    [$type, $message] = reset_password_panitia($conn, $id_pan, $baru);
+    flash_set($type, $message);
+    redirect('admin.php?page=panitia');
+}
+
+// ==========================================
+// HAPUS PANITIA (HANYA admin)
+// ==========================================
+if (isset($_POST['hapus_panitia'])) {
+    csrf_check();
+    if (($_SESSION['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        exit('Akses ditolak.');
+    }
+    $id_pan = (int) ($_POST['id_user'] ?? 0);
+    [$type, $message] = hapus_panitia($conn, $id_pan);
+    flash_set($type, $message);
+    redirect('admin.php?page=panitia');
+}
 ?>
 
 <!DOCTYPE html>
@@ -554,7 +664,7 @@ if (isset($_POST['reset_password'])) {
                 </div>
                 <div>
                     <div class="fw-bold mb-0 text-dark">AcadeMeet</div>
-                    <small class="text-muted" style="font-size: 0.75rem;">Admin Panel</small>
+                    <small class="text-muted" style="font-size: 0.75rem;"><?= $role_aktif === 'panitia' ? 'Panel Panitia' : 'Admin Panel' ?></small>
                 </div>
             </div>
             <!-- Close Button for Mobile -->
@@ -567,6 +677,7 @@ if (isset($_POST['reset_password'])) {
             <small class="text-uppercase text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">Menu Navigasi</small>
         </div>
         <ul class="nav flex-column mb-auto">
+            <?php if ($role_aktif === 'admin'): ?>
             <li class="nav-item">
                 <a href="?page=dashboard" class="nav-link <?= ($page == 'dashboard') ? 'active' : '' ?>" <?= $page == 'dashboard' ? 'aria-current="page"' : '' ?>>
                     <i class="bi bi-grid-1x2"></i> Dashboard
@@ -575,6 +686,11 @@ if (isset($_POST['reset_password'])) {
             <li class="nav-item">
                 <a href="?page=mahasiswa" class="nav-link <?= (in_array($page, ['mahasiswa', 'detail_mahasiswa'])) ? 'active' : '' ?>" <?= in_array($page, ['mahasiswa', 'detail_mahasiswa']) ? 'aria-current="page"' : '' ?>>
                     <i class="bi bi-people"></i> Data Mahasiswa
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="?page=panitia" class="nav-link <?= ($page == 'panitia') ? 'active' : '' ?>" <?= $page == 'panitia' ? 'aria-current="page"' : '' ?>>
+                    <i class="bi bi-person-vcard"></i> Data Panitia
                 </a>
             </li>
             <li class="nav-item">
@@ -587,16 +703,24 @@ if (isset($_POST['reset_password'])) {
                     <i class="bi bi-plus-circle"></i> Buat Seminar
                 </a>
             </li>
+            <?php endif; ?>
             <li class="nav-item">
                 <a href="?page=scan" class="nav-link <?= ($page == 'scan') ? 'active' : '' ?>" <?= $page == 'scan' ? 'aria-current="page"' : '' ?>>
                     <i class="bi bi-qr-code-scan"></i> Scanner Check-in
                 </a>
             </li>
             <li class="nav-item">
+                <a href="?page=peserta" class="nav-link <?= ($page == 'peserta') ? 'active' : '' ?>" <?= $page == 'peserta' ? 'aria-current="page"' : '' ?>>
+                    <i class="bi bi-clipboard-check"></i> <?= $role_aktif === 'panitia' ? 'Peserta Hari Ini' : 'Daftar Peserta' ?>
+                </a>
+            </li>
+            <?php if ($role_aktif === 'admin'): ?>
+            <li class="nav-item">
                 <a href="?page=laporan" class="nav-link <?= ($page == 'laporan') ? 'active' : '' ?>" <?= $page == 'laporan' ? 'aria-current="page"' : '' ?>>
                     <i class="bi bi-file-earmark-spreadsheet"></i> Laporan
                 </a>
             </li>
+            <?php endif; ?>
         </ul>
 
         <div class="p-3 border-top mt-auto">
@@ -607,7 +731,7 @@ if (isset($_POST['reset_password'])) {
                     </div>
                     <div>
                         <div class="small fw-bold text-dark text-truncate" style="max-width: 120px;"><?= htmlspecialchars($_SESSION['nama']); ?></div>
-                        <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Administrator</span>
+                        <span class="badge bg-light text-muted border" style="font-size: 0.65rem;"><?= $role_aktif === 'panitia' ? 'Panitia' : 'Administrator' ?></span>
                     </div>
                 </div>
                 <form method="POST" action="logout.php" class="d-inline m-0">
@@ -875,6 +999,10 @@ if (isset($_POST['reset_password'])) {
                                                </a>"
                                             : "";
 
+                                        $aksi_peserta = "<a href='admin.php?page=peserta&id=$id_sem' class='btn btn-sm btn-light-info fw-semibold'>
+                                                <i class='bi bi-clipboard-check me-1'></i>Peserta
+                                               </a>";
+
                                         echo "<tr>
                                                 <td><img src='" . e($img_src) . "' alt='Poster " . e($row['judul']) . "' class='rounded-3 shadow-sm border' width='80' height='50' loading='lazy' decoding='async' style='object-fit:cover;'></td>
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
@@ -885,6 +1013,7 @@ if (isset($_POST['reset_password'])) {
                                                 <td>$status_badge</td>
                                                 <td class='text-center'>
                                                     <div class='d-flex justify-content-center gap-1'>
+                                                        $aksi_peserta
                                                         $aksi_edit
                                                         $aksi_selesai
                                                         <button type='button'
@@ -1990,6 +2119,407 @@ if (isset($_POST['reset_password'])) {
                     </div>
                     <?= table_footer($total, $p, $per) ?>
                 </div>
+            <?php
+            // ---------------------------------------------------------
+            // MENU 7: DAFTAR PESERTA (admin & panitia)
+            // ---------------------------------------------------------
+            } elseif ($page == 'peserta') {
+                $id_sem = (int) ($_GET['id'] ?? 0);
+                $hariIniP = date('Y-m-d');
+                $boleh_lihat = false;
+                $sem = null;
+
+                if ($id_sem > 0) {
+                    $stmt = mysqli_prepare($conn, "SELECT id_seminar, judul, tanggal, jam_mulai, jam_selesai, status FROM seminars WHERE id_seminar = ? LIMIT 1");
+                    mysqli_stmt_bind_param($stmt, 'i', $id_sem);
+                    mysqli_stmt_execute($stmt);
+                    $sem = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+                    mysqli_stmt_close($stmt);
+                    if ($sem) {
+                        $status_efektif_p = seminar_status_efektif((string) $sem['status'], (string) $sem['tanggal'], $hariIniP);
+                        if ($role_aktif === 'admin') {
+                            $boleh_lihat = true;
+                        } else {
+                            $boleh_lihat = $status_efektif_p === 'Aktif' && (string) $sem['tanggal'] === $hariIniP;
+                        }
+                    }
+                }
+
+                if ($id_sem > 0 && !$boleh_lihat) {
+                    echo '<div class="alert alert-warning border-0 rounded-3" role="alert"><i class="bi bi-exclamation-triangle-fill me-2"></i>'
+                        . ($sem ? 'Seminar ini bukan seminar hari ini.' : 'Seminar tidak ditemukan.') . '</div>';
+                    echo '<a href="admin.php?page=peserta" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-left me-1"></i>Kembali</a>';
+                } elseif ($sem) {
+                    $status_efektif_p = seminar_status_efektif((string) $sem['status'], (string) $sem['tanggal'], $hariIniP);
+                    $jendela_terbuka = $status_efektif_p === 'Aktif' && checkin_window_error((string) $sem['tanggal'], $hariIniP) === null;
+
+                    [$p, $per, $q] = list_page(20);
+                    $where = "r.id_seminar = " . (int) $sem['id_seminar'];
+                    $argsType = '';
+                    $argsVal = [];
+                    if ($q !== '') {
+                        $like = '%' . like_escape($q) . '%';
+                        $where .= " AND (u.nama_lengkap LIKE ? ESCAPE '\\\\' OR u.nim LIKE ? ESCAPE '\\\\')";
+                        $argsType = 'ss';
+                        $argsVal = [$like, $like];
+                    }
+                    $stmt = mysqli_prepare($conn, "SELECT COUNT(*) AS c FROM registrations r JOIN users u ON r.id_user = u.id_user WHERE $where");
+                    if ($argsType !== '') { mysqli_stmt_bind_param($stmt, $argsType, ...$argsVal); }
+                    mysqli_stmt_execute($stmt);
+                    $total = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['c'];
+                    mysqli_stmt_close($stmt);
+                    $p = min($p, max(1, (int) ceil($total / $per)));
+                    $offset = ($p - 1) * $per;
+
+                    $stmt = mysqli_prepare($conn, "SELECT r.id_registrasi, r.kode_tiket, r.status_hadir, r.checkin_at,
+                            u.nama_lengkap, u.nim, u.prodi
+                        FROM registrations r JOIN users u ON r.id_user = u.id_user
+                        WHERE $where
+                        ORDER BY u.nama_lengkap ASC LIMIT " . (int) $per . " OFFSET " . (int) $offset);
+                    if ($argsType !== '') { mysqli_stmt_bind_param($stmt, $argsType, ...$argsVal); }
+                    mysqli_stmt_execute($stmt);
+                    $peserta_rows = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+                    mysqli_stmt_close($stmt);
+
+                    $stmt = mysqli_prepare($conn, "SELECT COUNT(*) AS c, COALESCE(SUM(r.status_hadir = 'Hadir'),0) AS hadir FROM registrations r WHERE r.id_seminar = ?");
+                    mysqli_stmt_bind_param($stmt, 'i', $sem['id_seminar']);
+                    mysqli_stmt_execute($stmt);
+                    $ringkas = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+                    mysqli_stmt_close($stmt);
+            ?>
+                <div class="card card-custom card-static overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-3 px-4">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h6 class="fw-bold mb-0 text-dark"><?= e($sem['judul']) ?></h6>
+                                <small class="text-muted"><i class="bi bi-calendar3 me-1"></i><?= e(date('d M Y', strtotime($sem['tanggal']))) ?><?= $sem['jam_mulai'] ? ' · ' . e(substr((string) $sem['jam_mulai'], 0, 5)) : '' ?><?= $sem['jam_selesai'] ? '-' . e(substr((string) $sem['jam_selesai'], 0, 5)) : '' ?></small>
+                            </div>
+                            <span class="badge badge-soft-primary px-3 py-2 rounded-pill">Hadir <?= (int) $ringkas['hadir'] ?> dari <?= (int) $ringkas['c'] ?> terdaftar</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <form method="get" action="admin.php" class="input-group input-group-sm mb-3" style="max-width: 320px;" role="search">
+                            <input type="hidden" name="page" value="peserta">
+                            <input type="hidden" name="id" value="<?= (int) $sem['id_seminar'] ?>">
+                            <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
+                            <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q) ?>" placeholder="Cari nama atau NIM..." aria-label="Cari peserta">
+                        </form>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Nama</th>
+                                        <th scope="col">NIM</th>
+                                        <th scope="col">Prodi</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Check-in</th>
+                                        <th scope="col" class="text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($peserta_rows): foreach ($peserta_rows as $row): ?>
+                                        <tr>
+                                            <td class="fw-semibold text-dark"><?= e($row['nama_lengkap']) ?></td>
+                                            <td class="text-muted"><?= e((string) $row['nim']) ?></td>
+                                            <td class="text-muted small"><?= e((string) $row['prodi']) ?></td>
+                                            <td>
+                                                <?php if ($row['status_hadir'] === 'Hadir'): ?>
+                                                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill px-3 py-1">Hadir</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary-subtle text-secondary-emphasis border rounded-pill px-3 py-1">Belum Hadir</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="text-muted small"><?= $row['checkin_at'] ? e(date('H:i', strtotime((string) $row['checkin_at']))) : '—' ?></td>
+                                            <td class="text-center">
+                                                <div class="d-flex justify-content-center gap-1">
+                                                    <?php if ($row['status_hadir'] === 'Belum Hadir' && $jendela_terbuka): ?>
+                                                        <form method="POST" action="admin.php?page=peserta&id=<?= (int) $sem['id_seminar'] ?>" class="d-inline m-0">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="id_registrasi" value="<?= (int) $row['id_registrasi'] ?>">
+                                                            <input type="hidden" name="id_seminar" value="<?= (int) $sem['id_seminar'] ?>">
+                                                            <button type="submit" name="checkin_manual" class="btn btn-sm btn-light-success fw-semibold"><i class="bi bi-check-circle me-1"></i>Tandai hadir</button>
+                                                        </form>
+                                                    <?php elseif ($row['status_hadir'] === 'Hadir' && $role_aktif === 'admin' && $jendela_terbuka): ?>
+                                                        <button type="button" class="btn btn-sm btn-light-danger fw-semibold js-batal-checkin"
+                                                            data-id="<?= (int) $row['id_registrasi'] ?>"
+                                                            data-nama="<?= e($row['nama_lengkap']) ?>"
+                                                            data-seminar="<?= (int) $sem['id_seminar'] ?>">
+                                                            <i class="bi bi-arrow-counterclockwise me-1"></i>Batalkan
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <span class="text-muted small">—</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; else: ?>
+                                        <tr><td colspan="6" class="text-center py-4 text-muted"><?= $q !== '' ? 'Tidak ada peserta yang cocok dengan pencarian.' : 'Belum ada peserta terdaftar.' ?></td></tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <?= table_footer($total, $p, $per) ?>
+                </div>
+
+                <?php if ($role_aktif === 'admin'): ?>
+                <!-- Modal Batalkan Check-in -->
+                <div class="modal fade" id="modalBatalCheckin" tabindex="-1" aria-labelledby="modalBatalCheckinLabel" aria-modal="true" role="dialog">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg rounded-4">
+                            <div class="modal-header border-0 pb-0">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="icon-tint icon-tint--danger"><i class="bi bi-arrow-counterclockwise fs-5"></i></div>
+                                    <div>
+                                        <h5 class="modal-title fw-bold text-body-emphasis mb-0" id="modalBatalCheckinLabel">Batalkan Check-in?</h5>
+                                        <p class="text-muted small mb-0">Status peserta kembali ke Belum Hadir</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-body pt-3">
+                                <p class="text-secondary mb-0">Check-in <strong id="namaBatalCheckin"></strong> akan dibatalkan dan waktu check-in dihapus.</p>
+                            </div>
+                            <div class="modal-footer border-0 pt-0">
+                                <button type="button" class="btn btn-light fw-semibold px-4" data-bs-dismiss="modal">Batal</button>
+                                <form method="POST" action="admin.php?page=peserta&id=<?= (int) $sem['id_seminar'] ?>" class="m-0">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id_registrasi" id="inputBatalCheckinId">
+                                    <input type="hidden" name="id_seminar" value="<?= (int) $sem['id_seminar'] ?>">
+                                    <button type="submit" name="batalkan_checkin" class="btn btn-danger fw-semibold px-4">Ya, Batalkan</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    (function () {
+                        var el = document.getElementById('modalBatalCheckin');
+                        if (!el) return;
+                        var modal = new bootstrap.Modal(el);
+                        document.querySelectorAll('.js-batal-checkin').forEach(function (btn) {
+                            btn.addEventListener('click', function () {
+                                document.getElementById('inputBatalCheckinId').value = btn.dataset.id;
+                                document.getElementById('namaBatalCheckin').textContent = btn.dataset.nama;
+                                modal.show();
+                            });
+                        });
+                    })();
+                </script>
+                <?php endif; ?>
+            <?php
+                } else {
+                    // Tanpa id: admin lihat pemilih seminar; panitia lihat seminar hari ini.
+                    if ($role_aktif === 'admin') {
+                        [$p, $per, $q] = list_page(15);
+                        $where = "1=1";
+                        if ($q !== '') {
+                            $like = '%' . like_escape($q) . '%';
+                            $where .= " AND judul LIKE ? ESCAPE '\\\\'";
+                        }
+                        $stmt = mysqli_prepare($conn, "SELECT COUNT(*) AS c FROM seminars WHERE $where");
+                        if ($q !== '') { mysqli_stmt_bind_param($stmt, 's', $like); }
+                        mysqli_stmt_execute($stmt);
+                        $total = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['c'];
+                        mysqli_stmt_close($stmt);
+                        $p = min($p, max(1, (int) ceil($total / $per)));
+                        $offset = ($p - 1) * $per;
+                        $stmt = mysqli_prepare($conn, "SELECT id_seminar, judul, tanggal, jam_mulai, status FROM seminars WHERE $where ORDER BY tanggal DESC, id_seminar DESC LIMIT " . (int) $per . " OFFSET " . (int) $offset);
+                        if ($q !== '') { mysqli_stmt_bind_param($stmt, 's', $like); }
+                        mysqli_stmt_execute($stmt);
+                        $daftar_sem = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+                        mysqli_stmt_close($stmt);
+            ?>
+                <div class="card card-custom card-static overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <h6 class="fw-bold mb-0 text-dark">Pilih Seminar</h6>
+                        <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 220px;" role="search">
+                            <input type="hidden" name="page" value="peserta">
+                            <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
+                            <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q) ?>" placeholder="Cari seminar..." aria-label="Cari seminar">
+                        </form>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light"><tr><th scope="col">Judul</th><th scope="col">Tanggal</th><th scope="col">Status</th><th scope="col" class="text-center">Aksi</th></tr></thead>
+                            <tbody>
+                                <?php if ($daftar_sem): foreach ($daftar_sem as $s): $se = seminar_status_efektif((string) $s['status'], (string) $s['tanggal'], $hariIniP); ?>
+                                    <tr>
+                                        <td class="fw-semibold text-dark"><?= e($s['judul']) ?></td>
+                                        <td class="text-muted small"><i class="bi bi-calendar3 me-1"></i><?= e(date('d M Y', strtotime($s['tanggal']))) ?></td>
+                                        <td><span class="badge <?= $se === 'Aktif' ? 'badge-soft-primary' : 'bg-secondary-subtle text-secondary-emphasis' ?> rounded-pill px-3 py-1"><?= e($se) ?></span></td>
+                                        <td class="text-center"><a href="admin.php?page=peserta&id=<?= (int) $s['id_seminar'] ?>" class="btn btn-sm btn-light-primary fw-semibold"><i class="bi bi-clipboard-check me-1"></i>Lihat Peserta</a></td>
+                                    </tr>
+                                <?php endforeach; else: ?>
+                                    <tr><td colspan="4" class="text-center py-4 text-muted"><?= $q !== '' ? 'Tidak ada seminar yang cocok.' : 'Belum ada seminar.' ?></td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?= table_footer($total, $p, $per) ?>
+                </div>
+            <?php
+                    } else {
+                        // Panitia: seminar Aktif hari ini saja.
+                        $stmt = mysqli_prepare($conn, "SELECT id_seminar, judul, tanggal, jam_mulai, jam_selesai FROM seminars WHERE tanggal = ? AND status = 'Aktif' ORDER BY jam_mulai ASC, id_seminar ASC");
+                        mysqli_stmt_bind_param($stmt, 's', $hariIniP);
+                        mysqli_stmt_execute($stmt);
+                        $daftar_hari = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+                        mysqli_stmt_close($stmt);
+            ?>
+                <div class="card card-custom card-static overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-3 px-4">
+                        <h6 class="fw-bold mb-0 text-dark">Seminar Hari Ini</h6>
+                        <small class="text-muted"><?= e(date('d M Y')) ?></small>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light"><tr><th scope="col">Judul</th><th scope="col">Jam</th><th scope="col" class="text-center">Aksi</th></tr></thead>
+                            <tbody>
+                                <?php if ($daftar_hari): foreach ($daftar_hari as $s): ?>
+                                    <tr>
+                                        <td class="fw-semibold text-dark"><?= e($s['judul']) ?></td>
+                                        <td class="text-muted small"><?= $s['jam_mulai'] ? e(substr((string) $s['jam_mulai'], 0, 5)) : '—' ?><?= $s['jam_selesai'] ? '-' . e(substr((string) $s['jam_selesai'], 0, 5)) : '' ?></td>
+                                        <td class="text-center"><a href="admin.php?page=peserta&id=<?= (int) $s['id_seminar'] ?>" class="btn btn-sm btn-light-primary fw-semibold"><i class="bi bi-clipboard-check me-1"></i>Peserta</a></td>
+                                    </tr>
+                                <?php endforeach; else: ?>
+                                    <tr><td colspan="3" class="text-center py-4 text-muted">Tidak ada seminar hari ini.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php
+                    }
+                }
+            // ---------------------------------------------------------
+            // MENU 8: DATA PANITIA (HANYA admin)
+            // ---------------------------------------------------------
+            } elseif ($page == 'panitia') {
+                $panitia_rows = mysqli_fetch_all(mysqli_query($conn, "SELECT id_user, nama_lengkap, email FROM users WHERE role = 'panitia' ORDER BY nama_lengkap ASC"), MYSQLI_ASSOC);
+            ?>
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="card card-custom card-static overflow-hidden">
+                            <div class="card-header bg-white border-bottom py-3 px-4">
+                                <h6 class="fw-bold mb-0 text-dark">Akun Panitia</h6>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light"><tr><th scope="col">Nama</th><th scope="col">Email</th><th scope="col" class="text-center">Aksi</th></tr></thead>
+                                    <tbody>
+                                        <?php if ($panitia_rows): foreach ($panitia_rows as $r): ?>
+                                            <tr>
+                                                <td class="fw-semibold text-dark"><?= e($r['nama_lengkap']) ?></td>
+                                                <td class="text-muted small"><?= e($r['email']) ?></td>
+                                                <td class="text-center">
+                                                    <div class="d-flex justify-content-center gap-1">
+                                                        <button type="button" class="btn btn-sm btn-light-primary fw-semibold js-reset-panitia" data-id="<?= (int) $r['id_user'] ?>" data-nama="<?= e($r['nama_lengkap']) ?>"><i class="bi bi-key me-1"></i>Reset</button>
+                                                        <button type="button" class="btn btn-sm btn-light-danger fw-semibold js-hapus-panitia" data-id="<?= (int) $r['id_user'] ?>" data-nama="<?= e($r['nama_lengkap']) ?>"><i class="bi bi-trash me-1"></i>Hapus</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; else: ?>
+                                            <tr><td colspan="3" class="text-center py-4 text-muted">Belum ada akun panitia.</td></tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card card-custom card-static">
+                            <div class="card-header bg-white border-bottom py-3 px-4">
+                                <h6 class="fw-bold mb-0 text-dark">Tambah Panitia</h6>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST" action="admin.php?page=panitia">
+                                    <?= csrf_field() ?>
+                                    <div class="mb-3">
+                                        <label for="nama_panitia" class="form-label small fw-semibold text-secondary">Nama</label>
+                                        <input type="text" name="nama" id="nama_panitia" class="form-control" maxlength="100" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="email_panitia" class="form-label small fw-semibold text-secondary">Email</label>
+                                        <input type="email" name="email" id="email_panitia" class="form-control" maxlength="100" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="password_panitia" class="form-label small fw-semibold text-secondary">Password Awal</label>
+                                        <input type="password" name="password" id="password_panitia" class="form-control" minlength="10" autocomplete="new-password" required>
+                                        <small class="text-muted">Minimal 10 karakter. Panitia wajib menggantinya saat login pertama.</small>
+                                    </div>
+                                    <button type="submit" name="tambah_panitia" class="btn btn-primary w-100 fw-semibold"><i class="bi bi-person-plus me-1"></i>Tambah Panitia</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Reset Password Panitia -->
+                <div class="modal fade" id="modalResetPanitia" tabindex="-1" aria-labelledby="modalResetPanitiaLabel" aria-modal="true" role="dialog">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg rounded-4">
+                            <form method="POST" action="admin.php?page=panitia" class="m-0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="id_user" id="inputResetPanitiaId">
+                                <div class="modal-header border-0 pb-0">
+                                    <h5 class="modal-title fw-bold" id="modalResetPanitiaLabel">Reset Password Panitia</h5>
+                                </div>
+                                <div class="modal-body pt-3">
+                                    <p class="text-secondary small">Reset password <strong id="namaResetPanitia"></strong>. Panitia wajib menggantinya saat login.</p>
+                                    <input type="password" name="password_baru" class="form-control" minlength="10" placeholder="Password baru (min 10 karakter)" autocomplete="new-password" required>
+                                </div>
+                                <div class="modal-footer border-0 pt-0">
+                                    <button type="button" class="btn btn-light fw-semibold px-4" data-bs-dismiss="modal">Batal</button>
+                                    <button type="submit" name="reset_password_panitia" class="btn btn-primary fw-semibold px-4">Simpan</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Hapus Panitia -->
+                <div class="modal fade" id="modalHapusPanitia" tabindex="-1" aria-labelledby="modalHapusPanitiaLabel" aria-modal="true" role="dialog">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg rounded-4">
+                            <form method="POST" action="admin.php?page=panitia" class="m-0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="id_user" id="inputHapusPanitiaId">
+                                <div class="modal-header border-0 pb-0">
+                                    <h5 class="modal-title fw-bold" id="modalHapusPanitiaLabel">Hapus Panitia?</h5>
+                                </div>
+                                <div class="modal-body pt-3">
+                                    <p class="text-secondary mb-0">Akun <strong id="namaHapusPanitia"></strong> akan dihapus permanen dan sesinya tidak berlaku lagi.</p>
+                                </div>
+                                <div class="modal-footer border-0 pt-0">
+                                    <button type="button" class="btn btn-light fw-semibold px-4" data-bs-dismiss="modal">Batal</button>
+                                    <button type="submit" name="hapus_panitia" class="btn btn-danger fw-semibold px-4">Ya, Hapus</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    (function () {
+                        var mr = document.getElementById('modalResetPanitia');
+                        var mh = document.getElementById('modalHapusPanitia');
+                        var modalReset = mr ? new bootstrap.Modal(mr) : null;
+                        var modalHapus = mh ? new bootstrap.Modal(mh) : null;
+                        document.querySelectorAll('.js-reset-panitia').forEach(function (b) {
+                            b.addEventListener('click', function () {
+                                document.getElementById('inputResetPanitiaId').value = b.dataset.id;
+                                document.getElementById('namaResetPanitia').textContent = b.dataset.nama;
+                                if (modalReset) modalReset.show();
+                            });
+                        });
+                        document.querySelectorAll('.js-hapus-panitia').forEach(function (b) {
+                            b.addEventListener('click', function () {
+                                document.getElementById('inputHapusPanitiaId').value = b.dataset.id;
+                                document.getElementById('namaHapusPanitia').textContent = b.dataset.nama;
+                                if (modalHapus) modalHapus.show();
+                            });
+                        });
+                    })();
+                </script>
             <?php
             }
             // Nilai isian lama hanya dipakai saat render form; bersihkan agar tidak bocor ke form lain.

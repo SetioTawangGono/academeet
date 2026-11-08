@@ -4,7 +4,10 @@ require __DIR__ . '/koneksi.php';
 require __DIR__ . '/services.php';
 
 if (isset($_SESSION['role'])) {
-    redirect($_SESSION['role'] === 'admin' ? 'admin.php' : 'mahasiswa.php');
+    $beranda = $_SESSION['role'] === 'admin'
+        ? 'admin.php'
+        : ($_SESSION['role'] === 'panitia' ? 'admin.php?page=scan' : 'mahasiswa.php');
+    redirect($beranda);
 }
 
 if (isset($_POST['login'])) {
@@ -76,7 +79,7 @@ if (isset($_POST['login'])) {
                 throttle_hapus($conn, 'login_ep', $kEmailIp);
             }
             unset($_SESSION['_login_attempts'], $_SESSION['_csrf']);
-            redirect($data['role'] === 'admin' ? 'admin.php' : 'mahasiswa.php');
+            redirect($data['role'] === 'admin' ? 'admin.php' : ($data['role'] === 'panitia' ? 'admin.php?page=scan' : 'mahasiswa.php'));
         }
 
         // Catat percobaan gagal ke DB (semua kunci) dan sesi.
