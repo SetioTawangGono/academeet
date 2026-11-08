@@ -709,8 +709,10 @@ if (isset($_POST['reset_password'])) {
                 <!-- Grafik dashboard -->
                 <?php
                 require_once __DIR__ . '/services.php';
+                $grafik_bulanan = statistik_pendaftar_bulanan($conn, 12);
                 $grafik_populer = statistik_seminar_populer($conn, 5);
                 $grafik_kehadiran = statistik_kehadiran_seminar($conn, 10);
+                $data_bulanan = $grafik_bulanan['bulan'];
                 $data_populer = [];
                 foreach ($grafik_populer as $g) {
                     $data_populer[] = ['label' => $g['judul'], 'nilai' => $g['terdaftar'], 'teks' => (string) $g['terdaftar']];
@@ -726,6 +728,17 @@ if (isset($_POST['reset_password'])) {
                 }
                 ?>
                 <div class="row g-3 mb-4">
+                    <div class="col-12">
+                        <div class="card card-custom card-static">
+                            <div class="card-body">
+                                <?= svg_bar_chart($data_bulanan, ['judul' => 'Pendaftar per Bulan', 'warna' => 'var(--bs-primary, #2563EB)']) ?>
+                                <?php if ((int) $grafik_bulanan['tanpa_waktu'] > 0): ?>
+                                    <p class="text-muted small mb-0"><?= (int) $grafik_bulanan['tanpa_waktu'] ?> pendaftaran lama tanpa catatan waktu</p>
+                                <?php endif; ?>
+                                <?= svg_chart_details($data_bulanan, ['Bulan', 'Pendaftar']) ?>
+                            </div>
+                        </div>
+                    </div>
                     <div class="col-12 col-xl-6">
                         <div class="card card-custom card-static h-100">
                             <div class="card-body">
