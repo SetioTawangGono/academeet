@@ -53,7 +53,26 @@
     var gAktif = svg.querySelector('[data-titik-aktif]');
     var dotTop = svg.querySelector('.paketd-dot-top');
     var dotBot = svg.querySelector('.paketd-dot-bot');
+    var plot = panel.querySelector('.paketd-chart-plot');
     var idx = -1;
+
+    // Ukur lebar/tinggi tooltip setelah teksnya diisi, lalu letakkan dalam batas plot.
+    function tempatkanTip() {
+      if (!tip || !plot || idx < 0) { return; }
+      var lp = plot.clientWidth || 0;
+      var hp = plot.clientHeight || 0;
+      if (lp <= 0 || hp <= 0) { return; }
+      var lt = tip.offsetWidth || 0;
+      var ht = tip.offsetHeight || 0;
+      var d = serie[idx];
+      var pt = posisiTitik(jalur, d, svg);
+      // Skala koordinat SVG (viewBox 1000x250) ke piksel plot.
+      var xt = (pt.x / 1000) * lp;
+      var yt = Math.min(Math.max((pt.yTotal / 250) * hp, 0), hp);
+      var pos = letakkanTooltip(xt, yt, lp, hp, lt, ht, 14);
+      tip.style.left = pos.left + 'px';
+      tip.style.top = pos.top + 'px';
+    }
 
     function pindah(i, umumkan) {
       if (i < 0) { i = 0; }
@@ -94,11 +113,10 @@
 
         tip.removeAttribute('hidden');
         tip.setAttribute('aria-hidden', 'false');
-        // Jaga tooltip di dalam kontainer (geser sedikit dari tepi).
-        var w = panel.clientWidth || 1;
-        var px = (d.x / 100) * w;
-        tip.style.left = Math.min(Math.max(px, 8), w - 8) + 'px';
-        tip.style.transform = 'translateX(-50%)';
+        // Ukur tooltip & letakkan dalam batas area plot (flip kiri/kanan + clamp).
+        tip.style.left = '0px';
+        tip.style.top = '0px';
+        tempatkanTip();
       }
       if (umumkan && live) {
         live.textContent = tanggalPanjang(d.tanggal) + ': ' + d.hadir + ' hadir, ' + d.belum + ' belum hadir, total ' + d.total;
@@ -132,6 +150,40 @@
       else if (e.key === 'Escape') { sembunyikan(); }
     });
     svg.addEventListener('blur', function () { sembunyikan(); });
+    // Ukuran ulang jendela: hitung posisi tooltip lagi.
+    window.addEventListener('resize', function () { tempatkanTip(); });
+  }
+
+  /* Letakkan tooltip: kanan titik bila cukup ruang, else kiri; clamp ke dalam plot.
+     Mengembalikan {left, top} dalam piksel relatif area plot. Aman utk ukuran 0/NaN. */
+  function letakkanTooltip(xTitik, yTitik, lebarPlot, tinggiPlot, lebarTip, tinggiTip, jarak) {
+    xTitik = Number(xTitik) || 0;
+    yTitik = Number(yTitik) || 0;
+    lebarPlot = Number(lebarPlot) || 0;
+    tinggiPlot = Number(tinggiPlot) || 0;
+    lebarTip = Number(lebarTip) || 0;
+    tinggiTip = Number(tinggiTip) || 0;
+    jarak = Number(jarak) || 0;
+
+    // Horizontal: kanan titik bila muat, else kiri; lalu clamp ke [0, lebarPlot-lebarTip].
+    var left;
+    if (lebarTip >= lebarPlot) {
+      left = 0;
+    } else {
+      left = xTitik + jarak;
+      if (left + lebarTip > lebarPlot) { left = xTitik - jarak - lebarTip; }
+      left = Math.min(Math.max(left, 0), lebarPlot - lebarTip);
+    }
+
+    // Vertikal: pusatkan ke titik, lalu clamp.
+    var top;
+    if (tinggiTip >= tinggiPlot) {
+      top = 0;
+    } else {
+      top = yTitik - tinggiTip / 2;
+      top = Math.min(Math.max(top, 0), tinggiPlot - tinggiTip);
+    }
+    return { left: left, top: top };
   }
 
   function barisTip(token, nama, nilai) {

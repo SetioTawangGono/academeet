@@ -249,6 +249,8 @@ $gi = grafik_area_html($sIsi, $sIsi, $sIsi, 5);
 $check('grafik_area_html: ada tiga <svg', substr_count($gi, '<svg') === 3);
 $check('grafik_area_html: ada path area', str_contains($gi, '<path'));
 $check('grafik_area_html: token warna --chart-1/2', str_contains($gi, 'var(--chart-1)') && str_contains($gi, 'var(--chart-2)'));
+$check('grafik_area_html: label ujung rata tepi (--kiri & --kanan)', str_contains($gi, 'paketd-xlabel--kiri') && str_contains($gi, 'paketd-xlabel--kanan'));
+$check('grafik_area_html: tiap panel punya label --kiri & --kanan (3 panel)', substr_count($gi, 'paketd-xlabel--kiri') === 3 && substr_count($gi, 'paketd-xlabel--kanan') === 3);
 $check('grafik_area_html: catatan tanpa waktu', str_contains($gi, 'pendaftaran lama tanpa catatan waktu'));
 // SVG di dalam kartu well-formed (potong per blok <svg>...</svg>).
 preg_match('#<svg\b.*?</svg>#s', $gi, $mSvg);

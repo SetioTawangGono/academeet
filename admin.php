@@ -534,7 +534,7 @@ if (isset($_POST['reset_password'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.12">
+    <link rel="stylesheet" href="style.css?v=2.13">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -2115,6 +2115,6 @@ if (isset($_POST['reset_password'])) {
     });
 </script>
 <script src="theme.js?v=2.10" defer></script>
-<script src="grafik.js?v=1.0" defer></script>
+<script src="grafik.js?v=1.1" defer></script>
 </body>
 </html>

@@ -242,7 +242,7 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.12">
+    <link rel="stylesheet" href="style.css?v=2.13">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>

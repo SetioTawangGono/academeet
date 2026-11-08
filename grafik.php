@@ -309,11 +309,14 @@ function grafik_panel_html(array $serie, string $id, string $panelId, bool $akti
     $html .= '<div class="paketd-hit" data-hit tabindex="-1"></div>';
     $html .= '<div class="paketd-xaxis" aria-hidden="true">';
     $idxLabel = pilih_label_x($n, 9);
+    $kMax = count($idxLabel) - 1;
     foreach ($idxLabel as $k => $i) {
         $x = $n > 1 ? ($i / ($n - 1)) * 100 : 50;
         $urut = ($k % 2 === 0) ? 'even' : 'odd';
+        // Label ujung rata tepi area plot agar tidak menjorok keluar.
+        $pos = $k === 0 ? ' paketd-xlabel--kiri' : ($k === $kMax ? ' paketd-xlabel--kanan' : '');
         $lbl = ((int) date('j', strtotime($serie[$i]['tanggal']))) . ' ' . nama_bulan_singkat((int) date('n', strtotime($serie[$i]['tanggal'])));
-        $html .= '<span class="paketd-xlabel paketd-xlabel--' . $urut . '" style="left:' . round($x, 3) . '%">' . e($lbl) . '</span>';
+        $html .= '<span class="paketd-xlabel paketd-xlabel--' . $urut . $pos . '" style="left:' . round($x, 3) . '%">' . e($lbl) . '</span>';
     }
     $html .= '</div>';
     // Tooltip (diisi JS).
