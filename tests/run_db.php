@@ -10,7 +10,7 @@ if (!str_ends_with($dbName, '_test')) {
 }
 
 require __DIR__ . '/../koneksi.php';
-require __DIR__ . '/../services.php';
+require_once __DIR__ . '/../services.php';
 
 $failed = 0;
 $check = static function (string $name, bool $ok) use (&$failed): void {

@@ -18,7 +18,7 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../bootstrap.php';
 require __DIR__ . '/../koneksi.php';
-require __DIR__ . '/../services.php';
+require_once __DIR__ . '/../services.php';
 
 /** Baca input tanpa echo (Windows: PowerShell SecureString). Fallback: prompt biasa. */
 function baca_password_tersembunyi(string $prompt): string

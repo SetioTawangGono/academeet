@@ -12,7 +12,7 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/../bootstrap.php';
 require __DIR__ . '/../koneksi.php';
-require __DIR__ . '/../services.php';
+require_once __DIR__ . '/../services.php';
 require __DIR__ . '/../mailer.php';
 
 date_default_timezone_set('Asia/Jakarta');

@@ -1421,3 +1421,8 @@ function buat_ics(array $acara, string $sekarangUtc): string
     $lines[] = 'END:VCALENDAR';
     return implode("\r\n", $lines) . "\r\n";
 }
+
+// Semua halaman wajib memuat bootstrap paling awal, jadi services ikut terpusat di sini.
+// Fungsi di services.php hanya definisi (menerima $conn sebagai parameter) sehingga aman
+// dimuat tanpa koneksi.
+require_once __DIR__ . '/services.php';
