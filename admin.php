@@ -1920,8 +1920,11 @@ if (isset($_POST['reset_password'])) {
                                                 <td class='text-center'><span class='badge bg-light text-muted border px-2 py-1'>{$tot_daftar} Peserta</span></td>
                                                 <td class='text-center'><span class='badge badge-soft-success px-3 py-1 rounded-pill'>{$tot_hadir} Hadir</span></td>
                                                 <td class='text-center'>
-                                                    <a href='export_excel.php?id={$id_sem}' target='_blank' rel='noopener' class='btn btn-sm btn-light-primary fw-semibold'>
-                                                        <i class='bi bi-file-earmark-excel me-1'></i> Export Excel
+                                                    <a href='export_excel.php?id={$id_sem}&format=xlsx' class='btn btn-sm btn-light-primary fw-semibold me-1'>
+                                                        <i class='bi bi-file-earmark-excel me-1'></i> Excel .xlsx
+                                                    </a>
+                                                    <a href='export_excel.php?id={$id_sem}&format=csv' class='btn btn-sm btn-light-secondary fw-semibold'>
+                                                        <i class='bi bi-filetype-csv me-1'></i> CSV
                                                     </a>
                                                 </td>
                                               </tr>";

@@ -103,6 +103,74 @@ $check('upload tanpa file mengembalikan null', upload_image(['error' => UPLOAD_E
 $check('csrf token 64 hex', (bool) preg_match('/^[0-9a-f]{64}$/', csrf_token()));
 $check('csrf_field berisi token', str_contains(csrf_field(), csrf_token()));
 
+// --- Export (P4): helper murni xlsx/csv ---
+$exHeader = ['No.', 'NIM', 'Nama', 'Prodi', 'Kode Tiket', 'Status'];
+$exBaris = [
+    [1, '0123456', 'Budi & <Sari>', 'Teknik "A"', 'ACD-1A2B3C', 'Hadir'],
+    [2, '=cmd|calc', '+1', '-1', '@SUM', "koma,kutip\ndanbaris"],
+    [3, '0789', 'Émile 😀', 'D3', 'ACD-FFFFFF', 'Belum Hadir'],
+];
+
+$xslxPath = xlsx_bangun($exHeader, $exBaris);
+$check('xlsx_bangun() menghasilkan file', is_file($xslxPath));
+$zipChk = new ZipArchive();
+$check('xlsx_bangun() file ZIP valid', $zipChk->open($xslxPath) === true);
+$need = ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/worksheets/sheet1.xml', 'xl/styles.xml'];
+$allParts = true;
+foreach ($need as $part) {
+    if ($zipChk->locateName($part) === false) { $allParts = false; }
+}
+$check('xlsx_bangun() semua bagian wajib ada', $allParts);
+$domOk = true;
+foreach ($need as $part) {
+    $xml = $zipChk->getFromName($part);
+    $d = new DOMDocument();
+    $prev = libxml_use_internal_errors(true);
+    if (!@$d->loadXML($xml)) { $domOk = false; }
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+}
+$check('xlsx_bangun() tiap XML well-formed', $domOk);
+$sheetSrc = $zipChk->getFromName('xl/worksheets/sheet1.xml');
+$zipChk->close();
+$check('xlsx_bangun() NIM nol depan utuh sebagai teks', str_contains($sheetSrc, '<t xml:space="preserve">0123456</t>'));
+$check('xlsx_bangun() formula =cmd dinetralkan', str_contains($sheetSrc, "<t xml:space=\"preserve\">&apos;=cmd|calc</t>"));
+$check('xlsx_bangun() formula +1 dinetralkan', str_contains($sheetSrc, "<t xml:space=\"preserve\">&apos;+1</t>"));
+$check('xlsx_bangun() formula -1 dinetralkan', str_contains($sheetSrc, "<t xml:space=\"preserve\">&apos;-1</t>"));
+$check('xlsx_bangun() formula @SUM dinetralkan', str_contains($sheetSrc, "<t xml:space=\"preserve\">&apos;@SUM</t>"));
+$check('xlsx_bangun() & < > " di-escape', str_contains($sheetSrc, 'Budi &amp; &lt;Sari&gt;'));
+$check('xlsx_bangun() emoji aman (UTF-8 utuh)', str_contains($sheetSrc, 'Émile 😀'));
+$check('xlsx_bangun() baris header + 3 data', substr_count($sheetSrc, '<row ') === 4);
+$check('xlsx_bangun() frozen pane dipasang', str_contains($sheetSrc, 'state="frozen"'));
+$check('xlsx_bangun() style header tebal dipakai (s="1")', str_contains($sheetSrc, 's="1"'));
+// Karakter kontrol dibuang.
+$ctrlPath = xlsx_bangun(['A'], [["a\x01b\x1Fc"]]);
+$cz = new ZipArchive(); $cz->open($ctrlPath);
+$ctrlSheet = $cz->getFromName('xl/worksheets/sheet1.xml'); $cz->close();
+$check('xlsx_bangun() karakter kontrol dibuang', str_contains($ctrlSheet, '<t xml:space="preserve">abc</t>'));
+@unlink($ctrlPath);
+@unlink($xslxPath);
+
+$csvPath = csv_bangun($exHeader, $exBaris);
+$check('csv_bangun() menghasilkan file', is_file($csvPath));
+$csvRaw = file_get_contents($csvPath);
+$check('csv_bangun() diawali BOM UTF-8', str_starts_with($csvRaw, "\xEF\xBB\xBF"));
+$csvBody = substr($csvRaw, 3);
+$fh = fopen($csvPath, 'r');
+fgetcsv($fh, 0, ','); // lewati BOM/header (BOM nempel di header, dibaca ulang di bawah)
+rewind($fh);
+$csvRows = [];
+while (($r = fgetcsv($fh, 0, ',')) !== false) { $csvRows[] = $r; }
+fclose($fh);
+$check('csv_bangun() jumlah baris = header + 3', count($csvRows) === 4);
+// Fputcsv membungkus sel ber-koma/kutip/newline; parse balik harus benar.
+$row2 = $csvRows[2];
+$check('csv_bangun() sel ber-koma/kutip/newline utuh', $row2[5] === "koma,kutip\ndanbaris");
+$check('csv_bangun() nilai ber-koma tidak pecah kolom', count($row2) === 6);
+$check('csv_bangun() formula dinetralkan', $csvRows[2][1] === "'=cmd|calc");
+@unlink($csvPath);
+
+
 $_GET = ['p' => 1, 'q' => ''];
 $check('list_page() default', list_page() === [1, 10, '']);
 $check('pagination_html() punya tautan halaman', str_contains(pagination_html(25, 1, 10), 'p=2'));

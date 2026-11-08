@@ -362,6 +362,148 @@ function excel_cell($value): string
     return $value;
 }
 
+/** Netralkan formula + escape teks untuk sel XML. Karakter kontrol ilegal dibuang. */
+function sel_aman(string $value): string
+{
+    $value = excel_cell($value);
+    // Buang karakter kontrol yang tidak valid di XML 1.0 (kecuali \t \n \r).
+    $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', '', $value) ?? $value;
+    return htmlspecialchars($value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+}
+
+/**
+ * Bangun CSV UTF-8 (dengan BOM) ke file temp. Mengembalikan path.
+ * $header: label kolom. $baris: array of array (tiap baris = list sel).
+ */
+function csv_bangun(array $header, array $baris): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'acdm_csv_');
+    $fh = fopen($path, 'w');
+    fwrite($fh, "\xEF\xBB\xBF");
+    fputcsv($fh, array_map('excel_cell', $header), ',');
+    foreach ($baris as $b) {
+        fputcsv($fh, array_map(static fn($v) => excel_cell((string) $v), $b), ',');
+    }
+    fclose($fh);
+    return $path;
+}
+
+/**
+ * Bangun XLSX minimal (tanpa library) memakai ZipArchive. Mengembalikan path temp.
+ * Semua sel bertipe inlineStr sehingga NIM berawalan nol tetap teks. Header tebal + beku.
+ */
+function xlsx_bangun(array $header, array $baris): string
+{
+    if (!class_exists('ZipArchive')) {
+        throw new RuntimeException('Ekstensi zip tidak tersedia.');
+    }
+    $cols = count($header);
+    $kolom_xml = static function (int $i): string {
+        $s = '';
+        while ($i > 0) {
+            $i--;
+            $s = chr(65 + ($i % 26)) . $s;
+            $i = intdiv($i, 26);
+        }
+        return $s;
+    };
+
+    // sheetData
+    $sheet = '';
+    $row = 1;
+    // Baris header (style 1 = tebal), beku di baris 1.
+    $sheet .= '<row r="' . $row . '">';
+    foreach ($header as $i => $h) {
+        $c = $kolom_xml($i + 1) . $row;
+        $sheet .= '<c r="' . $c . '" s="1" t="inlineStr"><is><t xml:space="preserve">' . sel_aman((string) $h) . '</t></is></c>';
+    }
+    $sheet .= '</row>';
+    foreach ($baris as $b) {
+        $row++;
+        $sheet .= '<row r="' . $row . '">';
+        for ($i = 0; $i < $cols; $i++) {
+            $val = (string) ($b[$i] ?? '');
+            $c = $kolom_xml($i + 1) . $row;
+            $sheet .= '<c r="' . $c . '" t="inlineStr"><is><t xml:space="preserve">' . sel_aman($val) . '</t></is></c>';
+        }
+        $sheet .= '</row>';
+    }
+
+    // Lebar kolom (default 20, sedikit lebih lebar untuk nama).
+    $colsXml = '';
+    for ($i = 1; $i <= $cols; $i++) {
+        $colsXml .= '<col min="' . $i . '" max="' . $i . '" width="22" customWidth="1"/>';
+    }
+
+    // Dimensi.
+    $dim = 'A1:' . $kolom_xml(max($cols, 1)) . max($row, 1);
+
+    $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<dimension ref="' . $dim . '"/>'
+        . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        . '<sheetFormatPr defaultRowHeight="15"/>'
+        . '<cols>' . $colsXml . '</cols>'
+        . '<sheetData>' . $sheet . '</sheetData>'
+        . '</worksheet>';
+
+    $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        . '</Types>';
+
+    $rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        . '</Relationships>';
+
+    $workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        . '<sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets>'
+        . '</workbook>';
+
+    $wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        . '</Relationships>';
+
+    $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<fonts count="2">'
+        . '<font><sz val="11"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="11"/><name val="Calibri"/></font>'
+        . '</fonts>'
+        . '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+        . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        . '<cellXfs count="2">'
+        . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+        . '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+        . '</cellXfs>'
+        . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+        . '</styleSheet>';
+
+    $path = tempnam(sys_get_temp_dir(), 'acdm_xlsx_');
+    $zip = new ZipArchive();
+    if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        @unlink($path);
+        throw new RuntimeException('Gagal membuat arsip xlsx.');
+    }
+    $zip->addFromString('[Content_Types].xml', $contentTypes);
+    $zip->addFromString('_rels/.rels', $rels);
+    $zip->addFromString('xl/workbook.xml', $workbook);
+    $zip->addFromString('xl/_rels/workbook.xml.rels', $wbRels);
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheetXml);
+    $zip->addFromString('xl/styles.xml', $styles);
+    $zip->close();
+    return $path;
+}
+
 function pdf_text(string $value): string
 {
     return function_exists('iconv')
