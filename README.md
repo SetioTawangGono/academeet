@@ -1,6 +1,6 @@
 # 📚 AcadeMeet
 
-**Portal Seminar & Event Kampus** — sistem manajemen seminar berbasis web dengan dua peran: **Admin** (pengelola) dan **Mahasiswa** (peserta).
+**Portal Seminar & Event Kampus** — sistem manajemen seminar berbasis web dengan peran **Admin** (pengelola), **Panitia** (check-in lapangan, akses terbatas), dan **Mahasiswa** (peserta).
 
 PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL verifikasi, QR tiket dibuat di browser dengan **qrcodejs**, ekspor laporan **`.xlsx`/CSV**, grafik dashboard **area chart SVG server-side + JS vanilla** (tanpa library/CDN baru), dan email ringan (konfirmasi + pengingat H-1 via CLI) tanpa antrean.
 
@@ -10,20 +10,21 @@ PHP Native + MySQL (XAMPP), UI **Bootstrap 5**, sertifikat **FPDF** dengan URL v
 
 | File | Fungsi |
 |------|--------|
-| `bootstrap.php` | Fondasi bersama: session hardening, timezone, `e()`, CSRF, flash, `require_role()`, helper tiket/password/upload/pagination, validasi data diri (`validasi_data_diri()`, `prodi_terdaftar()`), jendela check-in, status efektif, header keamanan, timeout sesi (`idle_timeout_seconds()`, `sesi_kedaluwarsa()`), kunci throttle (`throttle_key()`). |
-| `services.php` | Logika DB (transaksi): `batalkan_pendaftaran()`, `ubah_seminar()`, `buat_admin()`, throttle (`throttle_terlalu_banyak()`/`throttle_catat()`/`throttle_hapus()`), token reset (`buat_token_reset()`/`pakai_token_reset()`). Dipanggil `mahasiswa.php`, `admin.php`, `index.php`, `verifikasi.php`, `lupa_password.php`, `reset_password.php`, dan tes. |
+| `bootstrap.php` | Fondasi bersama: session hardening, timezone, `e()`, CSRF, flash, `require_role()`, helper tiket/password/upload/pagination, validasi data diri (`validasi_data_diri()`, `prodi_terdaftar()`), jendela check-in, status efektif, header keamanan, timeout sesi (`idle_timeout_seconds()`, `sesi_kedaluwarsa()`), kunci throttle (`throttle_key()`). Juga helper Paket E1: izin peran (`role_boleh_halaman()`, `role_boleh_aksi()`), aturan password per peran (`password_min_untuk_role()`, `password_ok_untuk_role()`, `password_max_bytes()`), parse/validasi CSV (`parse_csv_mahasiswa()`, `validasi_baris_impor()`, `csv_sel_bahaya()`), ttd sertifikat (`validasi_ttd()`, `muat_teks()`). |
+| `services.php` | Logika DB (transaksi): `batalkan_pendaftaran()`, `ubah_seminar()`, `buat_admin()`, throttle (`throttle_terlalu_banyak()`/`throttle_catat()`/`throttle_hapus()`), token reset (`buat_token_reset()`/`pakai_token_reset()`), dan Paket E1: `checkin_manual()`, `batalkan_checkin()`, `buat_panitia()`/`reset_password_panitia()`/`hapus_panitia()`, `ganti_password_wajib()`, `pratinjau_impor_csv()`/`terapkan_impor()`. Dipanggil `mahasiswa.php`, `admin.php`, `index.php`, `verifikasi.php`, `lupa_password.php`, `reset_password.php`, dan tes. |
 | `index.php` | Login (throttle DB 3 kunci + throttle sesi, pesan generik, `session_regenerate_id`, rehash password, waktu respons diseragamkan). |
 | `register.php` | Registrasi mahasiswa + validasi server + CSRF. |
 | `logout.php` | Hapus session & cookie, redirect ke login. |
 | `koneksi.php` | Koneksi MySQL via env (fallback `localhost`/`root`), charset `utf8mb4`. |
-| `admin.php` | Dashboard admin multi-halaman via `?page=`. |
+| `admin.php` | Dashboard admin multi-halaman via `?page=`. Sejak Paket E1: juga dipakai peran **Panitia** dengan daftar halaman & aksi default-deny (hanya `scan`/`peserta` + check-in manual), plus halaman `panitia` (kelola akun panitia) dan `impor_mahasiswa` (admin-only). |
+| `ganti_password.php` | Paket E1: halaman wajib ganti password (semua peran). Akun ber-`wajib_ganti_password=1` dialihkan ke sini sebelum bisa membuka halaman lain. |
 | `grafik.php` | Grafik dashboard (F12): helper murni (`serie_harian()`, `monotone_path()` Fritsch–Carlson, `skala_y_ramah()`, `pilih_label_x()`, `nama_bulan_singkat()`) + render `grafik_area_html()` (kartu area bertumpuk) dan `grafik_daftar_html()` (baris ringkas). Tanpa library. |
 | `grafik.js` | Interaksi grafik area (vanilla): dropdown rentang, tooltip lewat `textContent`, titik aktif, tombol panah/Home/End/Esc, `aria-live`. Dimuat `<script src="grafik.js?v=…" defer>`. |
 | `mahasiswa.php` | Portal mahasiswa: katalog, tiket, profil. |
 | `lupa_password.php` | F5: form permintaan tautan reset (respons generik, throttle per email/IP). |
 | `reset_password.php` | F5: halaman set password baru dari token (sekali pakai, 30 menit). |
 | `mailer.php` | F5: kirim email via PHPMailer (`kirim_email()`, `isi_email_reset()`), konfigurasi dari env SMTP. |
-| `sertifikat.php` | Preview & unduh sertifikat PDF (hanya jika `status_hadir='Hadir'`). Menyertakan URL verifikasi keaslian (F7). |
+| `sertifikat.php` | Preview & unduh sertifikat PDF (hanya jika `status_hadir='Hadir'`). Menyertakan URL verifikasi keaslian (F7). Sejak Paket E1 memakai `seminars.ttd_nama`/`ttd_jabatan` bila terisi, atau teks bawaan bila kosong. |
 | `verifikasi.php` | Halaman publik verifikasi sertifikat berdasarkan kode tiket (throttle DB per IP + sesi). |
 | `kalender.php` | Unduh `.ics` satu registrasi milik user (`?id=<id_registrasi>`, mahasiswa, owner-only) untuk "Tambah ke kalender". |
 | `export_excel.php` | Ekspor peserta per seminar sebagai **`.xlsx` asli** (penulis minimal `ZipArchive`, tanpa library; NIM tersimpan sebagai teks) atau **CSV UTF-8** via `?format=xlsx|csv` (default `xlsx`), admin-only. |
@@ -93,6 +94,18 @@ Seminar lama otomatis menjadi `kategori='Umum'`, kolom lain `NULL`. Daftar kateg
 
 `created_at` ditambahkan **tanpa** default lebih dulu, lalu `ALTER ... SET DEFAULT CURRENT_TIMESTAMP` terpisah, agar baris lama tetap `NULL` saat migrasi. Keduanya idempoten (dicek via `information_schema`).
 
+### Kolom Paket E1 (operasional admin)
+
+`migrasi.sql` / `database.sql` menambahkan **lima perubahan** (tanpa tabel baru; batas tetap **maksimum 6 tabel**):
+
+| Objek | Tipe | Catatan |
+|-------|------|---------|
+| `registrations.checkin_at` | `DATETIME NULL` | Waktu check-in sebenarnya (scanner maupun manual). Di-`NULL`-kan lagi saat koreksi (admin membatalkan check-in). |
+| `users.role` | `ENUM('admin','mahasiswa','panitia')` | Nilai `'panitia'` ditambahkan. Panitia hanya boleh membuka Scanner Check-in & daftar peserta hari ini. |
+| `users.wajib_ganti_password` | `TINYINT(1) NOT NULL DEFAULT 0` | Bila `1`, user dipaksa mengganti password di `ganti_password.php` sebelum halaman lain. Diisi saat akun panitia dibuat/direset admin, atau saat impor CSV massal. Akun lama tetap `0`. |
+| `seminars.ttd_nama` | `VARCHAR(100) NULL` | Nama penandatangan pada sertifikat. Kosong (`NULL`) → sertifikat memakai teks bawaan. |
+| `seminars.ttd_jabatan` | `VARCHAR(100) NULL` | Jabatan penandatangan (boleh kosong, tetapi nama wajib diisi bila jabatan diisi). Mengubah `ttd_*` **tidak** mengisi `jadwal_diubah_at`. |
+
 ### Kredensial database
 
 `koneksi.php` membaca environment variable berikut (default untuk XAMPP):
@@ -110,6 +123,7 @@ Seminar lama otomatis menjadi `kategori='Umum'`, kolom lain `NULL`. Daftar kateg
 |-----|---------|--------|
 | `ACADEMEET_IDLE_ADMIN_MIN` | `60` | Timeout tidak aktif sesi admin (menit). |
 | `ACADEMEET_IDLE_USER_MIN` | `240` | Timeout tidak aktif sesi mahasiswa (menit). |
+| `ACADEMEET_IDLE_PANITIA_MIN` | `120` | Timeout tidak aktif sesi panitia (menit). |
 | `ACADEMEET_BASE_URL` | *(wajib untuk F5 & F7)* | Basis URL absolut untuk tautan reset **dan** URL verifikasi di sertifikat (mis. `http://localhost/academeet`). Tautan **tidak** dibangun dari header `Host`. |
 | `ACADEMEET_SMTP_HOST` | *(wajib untuk F5)* | Host SMTP (mis. `sandbox.smtp.mailtrap.io`). |
 | `ACADEMEET_SMTP_PORT` | `587` | Port SMTP. |
@@ -174,7 +188,9 @@ Catatan:
 
 ## 🔐 Keamanan
 
-- Password `password_hash()` / `password_verify()`; password mahasiswa minimal 8 karakter, password admin minimal 12. Login sukses menjalankan `password_needs_rehash()`.
+- Password `password_hash()` / `password_verify()`; password minimal per peran: mahasiswa 8, panitia 10, admin 12 karakter (batas atas 72 byte). Login sukses menjalankan `password_needs_rehash()`.
+- **Peran panitia (F15)**: akses dibatasi dengan pendekatan *default-deny* di `admin.php` (`role_boleh_halaman()`/`role_boleh_aksi()`) — hanya Scanner Check-in, daftar peserta hari ini, dan check-in manual; aksi lain (hapus/edit, kelola panitia, impor) ditolak `403`. Menu & label disesuaikan per peran. Tidak ada percabangan yang memperlakukan panitia sebagai mahasiswa atau admin.
+- **Wajib ganti password (F15)**: akun ber-`wajib_ganti_password=1` (dibuat admin atau hasil impor CSV) dialihkan `require_role()` ke `ganti_password.php`; hanya halaman ini dan `logout.php` yang boleh dibuka. Penggantian sukses menurunkan flag dan menaikkan `auth_version`.
 - Semua mutasi memakai **POST + token CSRF** (`csrf_field()` / `csrf_check()`); GET hanya untuk membaca.
 - Query memakai **prepared statement**; output di-escape dengan `e()`.
 - **Throttle di database** (`auth_throttle`, jendela geser 15 menit): login dibatasi per (email+IP) 5, per IP 30, per email global 20; verifikasi tiket 10 per IP; permintaan reset 3 per email & 10 per IP per jam. Kunci disimpan sebagai SHA-256; IP diambil dari `REMOTE_ADDR` (tidak mempercayai `X-Forwarded-For`). Throttle sesi lama tetap dipakai sebagai lapis kedua; bila query DB gagal, sistem `error_log` lalu jatuh ke throttle sesi.
@@ -187,6 +203,8 @@ Catatan:
 - **F5 lupa password**: token 32 byte acak, disimpan SHA-256, berlaku 30 menit, sekali pakai, satu aktif per user, hanya untuk role mahasiswa. Respons permintaan selalu sama (anti enumerasi email) dan waktu respons diseragamkan. Tautan dibangun dari `ACADEMEET_BASE_URL`, bukan header `Host`; halaman reset mengirim `Referrer-Policy: no-referrer` dan `Cache-Control: no-store`; tautan tidak pernah ditulis ke log.
 - **Header keamanan HTTP** dikirim sekali di `bootstrap.php`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()`, `Strict-Transport-Security` (hanya HTTPS), dan `Content-Security-Policy` (`default-src 'self'`; `script-src`/`style-src`/`font-src` mengizinkan `'unsafe-inline'` + `https://cdn.jsdelivr.net`; `img-src 'self' data: blob:`; `object-src 'none'`; `frame-ancestors 'self'`).
 
+- **Impor mahasiswa CSV (F16)**: halaman `impor_mahasiswa` (hanya admin). Langkah 1 unggah & pratinjau (read-only, tanpa menulis `users`): maks 1 MB / 500 baris, header wajib `nim,nama,prodi,email` (urutan bebas, pemisah koma/titik-koma, BOM ditoleransi), validasi per baris memakai aturan registrasi + deteksi duplikat NIM/email (case-insensitive) terhadap DB. Bila **ada satu kesalahan**, tidak ada akun dibuat (all-or-nothing). Langkah 2 memakai token sesi sekali pakai (kedaluwarsa 15 menit) + password awal; semua akun ditulis dalam satu transaksi dengan satu hash (dihitung sekali), `wajib_ganti_password=1`. Password awal **tidak** masuk CSV, sesi, log, atau disimpan sebagai teks asli.
+
 ---
 
 ## ⚙️ Sistem Admin (`admin.php`)
@@ -194,10 +212,13 @@ Catatan:
 | Parameter | Fitur |
 |-----------|-------|
 | `dashboard` | Statistik + **grafik area interaktif** "Pendaftar Seminar" (per hari, dua seri bertumpuk Hadir/Belum hadir, rentang 90/30/7 hari lewat dropdown, tooltip & keyboard, `<details>` data angka) + dua kartu ringkas baris HTML/CSS (Tingkat Kehadiran per Seminar, 5 Seminar Terpopuler) + daftar seminar (search & pagination server-side), aksi Edit/Selesai/Hapus. Grafik dirender server-side sebagai SVG+HTML (tanpa React/Tailwind/recharts/Chart.js/CDN baru); interaksi lewat `grafik.js` vanilla. Tiap grafik punya `role="group"` + wilayah `aria-live`. Status efektif: seminar bertanggal lampau dianggap Selesai dan tidak bisa diedit. Kolom Kategori + jam ditampilkan. |
-| `tambah` | Tambah seminar: judul, pemateri, tanggal, jam mulai/selesai, kategori, lokasi, link online, deskripsi, kuota, poster. |
-| `edit_seminar` | Edit seminar (hanya untuk seminar efektif Aktif). Kuota adalah **kuota total**; sisa = total − jumlah pendaftar, total tidak boleh kurang dari jumlah pendaftar. Detail (jam/kategori/lokasi/link/deskripsi) dapat diisi atau dikosongkan. Bila tanggal/jam/lokasi/link berubah, `jadwal_diubah_at` diisi (pita di tiket peserta) dan `h1_terkirim_at` direset saat tanggal berubah. Poster baru opsional. |
-| `scan` | Check-in via kode tiket (manual atau scan kamera). Idempoten: tiket yang sudah hadir ditolak. |
-| `mahasiswa` | Daftar mahasiswa (search & pagination), detail, hapus. |
+| `tambah` | Tambah seminar: judul, pemateri, tanggal, jam mulai/selesai, kategori, lokasi, link online, deskripsi, kuota, poster, **nama/jabatan penandatangan sertifikat** (F18, opsional). |
+| `edit_seminar` | Edit seminar (hanya untuk seminar efektif Aktif). Kuota adalah **kuota total**; sisa = total − jumlah pendaftar, total tidak boleh kurang dari jumlah pendaftar. Detail (jam/kategori/lokasi/link/deskripsi/ttd) dapat diisi atau dikosongkan. Bila tanggal/jam/lokasi/link berubah, `jadwal_diubah_at` diisi (pita di tiket peserta) dan `h1_terkirim_at` direset saat tanggal berubah. Poster baru opsional. Mengubah `ttd_nama`/`ttd_jabatan` tidak mengisi `jadwal_diubah_at`. |
+| `scan` | Check-in via kode tiket (manual atau scan kamera). Idempoten: tiket yang sudah hadir ditolak. Mengisi `checkin_at`. |
+| `peserta` | Daftar peserta per seminar + **check-in manual/koreksi** (F13). Admin: semua seminar + tombol "Tandai hadir"/"Batalkan". Panitia: hanya seminar **Aktif hari ini**; tanpa kode tiket, tanpa tombol Batalkan. |
+| `panitia` | Kelola akun panitia (admin-only): tambah (password awal min 10, wajib diganti saat login pertama), reset password, hapus. |
+| `impor_mahasiswa` | Impor mahasiswa massal dari CSV (admin-only), 2 langkah: unggah+pratinjau (read-only) lalu konfirmasi dengan password awal. Semua-atau-tidak-sama-sekali. |
+| `mahasiswa` | Daftar mahasiswa (search & pagination), detail, hapus, tombol **Impor CSV**. |
 | `detail_mahasiswa` | Profil, statistik, riwayat tiket, reset password. |
 | `pemateri` | Daftar pemateri (search & pagination), tambah, detail, hapus. |
 | `laporan` | Rekap pendaftar/hadir per seminar + export **`.xlsx`/CSV**. |
@@ -221,13 +242,15 @@ Pendaftaran berjalan atomik (`SELECT ... FOR UPDATE`): kuota, status, tanggal, d
 
 Check-in hanya bisa pada hari H (zona Asia/Jakarta). Seminar yang tanggalnya sudah lewat dianggap Selesai saat dibaca (tanpa menulis DB); `tools/tutup_seminar.php` menyinkronkan status di DB via CLI.
 
+**Aturan check-in: scanner vs manual (F13).** Scanner (`handleCheckin`) menolak tanggal lampau lewat guard eksplisit "Jadwal seminar sudah lewat" **sebelum** cek jendela, lalu `checkin_window_error` menolak tanggal masa depan — jadi scanner hanya mengizinkan hari H. Check-in manual (`checkin_manual`) memakai cek eksplisit `tanggal == hari ini` + `checkin_window_error`, juga hanya hari H; fungsi `checkin_window_error` sendiri hanya menolak tanggal **masa depan** (aman karena kedua pemanggil menegakkan batas lampau masing-masing).
+
 ---
 
 ## 🔄 Alur Kerja
 
-1. Admin membuat pemateri, lalu seminar (termasuk kategori & detail jam/lokasi/deskripsi).
-2. Mahasiswa mendaftar → mendapat kode tiket + QR + **email konfirmasi** (best-effort).
-3. Panitia check-in di menu **Scan** → status `Hadir`.
+1. Admin membuat pemateri, lalu seminar (termasuk kategori & detail jam/lokasi/deskripsi, dan opsional nama/jabatan penandatangan sertifikat).
+2. Mahasiswa mendaftar → mendapat kode tiket + QR + **email konfirmasi** (best-effort). Admin juga bisa mengimpor mahasiswa massal lewat CSV.
+3. Panitia (atau admin) check-in di menu **Scan**; admin dapat mengoreksi check-in di halaman **Daftar Peserta** (F13). Akun panitia dikelola admin di halaman **Data Panitia**, dan wajib mengganti password saat login pertama.
 4. Mahasiswa mengunduh sertifikat PDF; peserta juga dapat menambahkan seminar ke kalender (`.ics`).
 5. Siapa pun dapat memverifikasi sertifikat di `verifikasi.php?kode=ACD-XXXXXX` (URL ini juga tercetak di sertifikat).
 6. Admin mengekspor laporan peserta ke **`.xlsx`/CSV**; dashboard menampilkan grafik.
