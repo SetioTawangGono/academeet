@@ -162,6 +162,14 @@ function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poste
         }
         mysqli_stmt_close($stmt);
 
+        // Bila tanggal berubah, pengingat H-1 harus bisa dikirim ulang untuk tanggal baru.
+        if ($tanggal !== (string) $row['tanggal']) {
+            $st_rst = mysqli_prepare($conn, "UPDATE registrations SET h1_terkirim_at = NULL WHERE id_seminar = ?");
+            mysqli_stmt_bind_param($st_rst, 'i', $id_seminar);
+            mysqli_stmt_execute($st_rst);
+            mysqli_stmt_close($st_rst);
+        }
+
         mysqli_commit($conn);
         return ['success', 'Seminar berhasil diperbarui.', true];
     } catch (Throwable $ex) {
@@ -455,4 +463,167 @@ function statistik_seminar_populer(mysqli $conn, int $limit = 5): array
         ];
     }
     return $out;
+}
+
+/**
+ * Pendaftar per bulan 12 bulan terakhir (berdasarkan registrations.created_at).
+ * Bulan tanpa data = 0. Baris created_at NULL dikecualikan dan dilaporkan terpisah.
+ * Mengembalikan ['bulan'=>[['label'=>'2026-08','nilai'=>int,'teks'=>int],...], 'tanpa_waktu'=>int].
+ */
+function statistik_pendaftar_bulanan(mysqli $conn, int $bulan = 12): array
+{
+    $bulan = max(1, min(24, $bulan));
+    // Hitung jendela 12 bulan terakhir (termasuk bulan ini) di PHP agar label pasti ada walau 0.
+    $labels = [];
+    $nowY = (int) date('Y');
+    $nowM = (int) date('n');
+    for ($i = $bulan - 1; $i >= 0; $i--) {
+        $ts = mktime(0, 0, 0, $nowM - $i, 1, $nowY);
+        $labels[date('Y-m', $ts)] = 0;
+    }
+    $awal = array_key_first($labels) . '-01 00:00:00';
+
+    $stmt = mysqli_prepare($conn, "SELECT DATE_FORMAT(created_at, '%Y-%m') AS bln, COUNT(*) AS c
+        FROM registrations WHERE created_at IS NOT NULL AND created_at >= ?
+        GROUP BY bln");
+    mysqli_stmt_bind_param($stmt, 's', $awal);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    while ($row = mysqli_fetch_assoc($res)) {
+        if (array_key_exists($row['bln'], $labels)) {
+            $labels[$row['bln']] = (int) $row['c'];
+        }
+    }
+    mysqli_stmt_close($stmt);
+
+    $out = [];
+    foreach ($labels as $bln => $n) {
+        $out[] = ['label' => $bln, 'nilai' => $n, 'teks' => (string) $n];
+    }
+
+    $stmt = mysqli_prepare($conn, "SELECT COUNT(*) AS c FROM registrations WHERE created_at IS NULL");
+    mysqli_stmt_execute($stmt);
+    $tanpa = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['c'];
+    mysqli_stmt_close($stmt);
+
+    return ['bulan' => $out, 'tanpa_waktu' => $tanpa];
+}
+
+/**
+ * Kirim email konfirmasi pendaftaran (best-effort). TIDAK pernah melempar / menggagalkan pendaftaran.
+ * $sem: baris seminar (judul, pemateri, tanggal, jam_mulai, jam_selesai, lokasi).
+ */
+function kirim_konfirmasi_pendaftaran(mysqli $conn, int $idUser, array $sem, string $kodeTiket): void
+{
+    try {
+        require_once __DIR__ . '/mailer.php';
+        if (smtp_config() === null) {
+            return; // SMTP belum diset -> lewati diam-diam.
+        }
+        $stmt = mysqli_prepare($conn, "SELECT nama_lengkap, email FROM users WHERE id_user = ? LIMIT 1");
+        if (!$stmt) {
+            return;
+        }
+        mysqli_stmt_bind_param($stmt, 'i', $idUser);
+        mysqli_stmt_execute($stmt);
+        $u = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+        if (!$u || !filter_var((string) $u['email'], FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        $base = (string) env_secret('ACADEMEET_BASE_URL');
+        [$subjek, $isi] = isi_email_konfirmasi($base, (string) $u['nama_lengkap'], $sem, $kodeTiket);
+        kirim_email((string) $u['email'], $subjek, $isi, 5);
+    } catch (Throwable $ex) {
+        error_log('Konfirmasi pendaftaran dilewati: ' . $ex->getMessage());
+    }
+}
+
+/**
+ * Proses pengingat H-1. Mengembalikan ringkasan ['terkirim'=>int,'gagal'=>int,'dilewati'=>int,'dihentikan'=>bool].
+ * - Seleksi: registrasi Belum Hadir, seminar Aktif, tanggal = $besok, user notif_email=1, h1_terkirim_at NULL, max $batas.
+ * - Klaim atomik agar dua proses tidak mengirim ganda.
+ * - Gagal kirim -> kembalikan h1_terkirim_at = NULL (dicoba lagi nanti).
+ * - 3 kegagalan berurutan -> hentikan eksekusi (SMTP dianggap mati).
+ * $kirim: callable(ke, subjek, isi): bool (pengirim asli di CLI, palsu di tes).
+ */
+function proses_pengingat_h1(mysqli $conn, string $besok, callable $kirim, int $batas = 50): array
+{
+    $batas = max(1, $batas);
+    $ringkas = ['terkirim' => 0, 'gagal' => 0, 'dilewati' => 0, 'dihentikan' => false];
+
+    require_once __DIR__ . '/mailer.php';
+    $base = (string) env_secret('ACADEMEET_BASE_URL');
+
+    $sql = "SELECT r.id_registrasi, r.kode_tiket, u.nama_lengkap, u.email,
+                   s.judul, s.pemateri, s.tanggal, s.jam_mulai, s.jam_selesai, s.lokasi
+            FROM registrations r
+            JOIN seminars s ON r.id_seminar = s.id_seminar
+            JOIN users u ON r.id_user = u.id_user
+            WHERE r.status_hadir = 'Belum Hadir'
+              AND s.status = 'Aktif'
+              AND s.tanggal = ?
+              AND u.notif_email = 1
+              AND r.h1_terkirim_at IS NULL
+            ORDER BY r.id_registrasi ASC
+            LIMIT " . (int) $batas;
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, 's', $besok);
+    mysqli_stmt_execute($stmt);
+    $rows = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+    mysqli_stmt_close($stmt);
+
+    if (empty($rows)) {
+        return $ringkas;
+    }
+
+    $kegagalan_beruntun = 0;
+    $klaim = mysqli_prepare($conn, "UPDATE registrations SET h1_terkirim_at = NOW() WHERE id_registrasi = ? AND h1_terkirim_at IS NULL");
+    $lepas = mysqli_prepare($conn, "UPDATE registrations SET h1_terkirim_at = NULL WHERE id_registrasi = ?");
+
+    foreach ($rows as $r) {
+        // Klaim atomik: hanya lanjut bila kita yang berhasil menandai.
+        mysqli_stmt_bind_param($klaim, 'i', $r['id_registrasi']);
+        mysqli_stmt_execute($klaim);
+        if (mysqli_stmt_affected_rows($klaim) !== 1) {
+            $ringkas['dilewati']++;
+            continue;
+        }
+
+        if (!filter_var((string) $r['email'], FILTER_VALIDATE_EMAIL)) {
+            // Tanpa alamat valid: lepas klaim agar tidak "terkirim" palsu.
+            mysqli_stmt_bind_param($lepas, 'i', $r['id_registrasi']);
+            mysqli_stmt_execute($lepas);
+            $ringkas['dilewati']++;
+            continue;
+        }
+
+        [$subjek, $isi] = isi_email_h1($base, (string) $r['nama_lengkap'], $r);
+        $ok = false;
+        try {
+            $ok = (bool) $kirim((string) $r['email'], $subjek, $isi);
+        } catch (Throwable $ex) {
+            error_log('Pengingat H-1 gagal: ' . $ex->getMessage());
+            $ok = false;
+        }
+
+        if ($ok) {
+            $ringkas['terkirim']++;
+            $kegagalan_beruntun = 0;
+        } else {
+            $ringkas['gagal']++;
+            $kegagalan_beruntun++;
+            // Kembalikan penanda agar dicoba pada eksekusi berikutnya.
+            mysqli_stmt_bind_param($lepas, 'i', $r['id_registrasi']);
+            mysqli_stmt_execute($lepas);
+            if ($kegagalan_beruntun >= 3) {
+                $ringkas['dihentikan'] = true;
+                break;
+            }
+        }
+    }
+
+    mysqli_stmt_close($klaim);
+    mysqli_stmt_close($lepas);
+    return $ringkas;
 }

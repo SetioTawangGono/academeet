@@ -198,6 +198,36 @@ $detOk = svg_chart_details([['label' => '<a>', 'nilai' => 3, 'teks' => '3']]);
 $check('svg_chart_details() label di-escape', str_contains($detOk, '&lt;a&gt;'));
 $check('svg_chart_details() pakai <details>', str_contains($detOk, '<details'));
 
+// --- Email (F6): helper murni, TANPA pengiriman ---
+$semEmail = [
+    'judul' => 'Workshop PHP', 'pemateri' => 'Dr. Budi', 'tanggal' => '2026-11-09',
+    'jam_mulai' => '09:00:00', 'jam_selesai' => '11:00:00', 'lokasi' => 'Aula', 'link_online' => 'https://meet.example.com/x',
+];
+[$subjK, $bodyK] = isi_email_konfirmasi('https://app.example.com', 'Budi', $semEmail, 'ACD-1A2B3C');
+$check('konfirmasi: subjek tanpa CR/LF', !str_contains($subjK, "\r") && !str_contains($subjK, "\n"));
+$check('konfirmasi: memuat kode tiket', str_contains($bodyK, 'ACD-1A2B3C'));
+$check('konfirmasi: TIDAK memuat link online', !str_contains($bodyK, 'meet.example.com'));
+$check('konfirmasi: tautan app muncul bila BASE_URL ada', str_contains($bodyK, 'https://app.example.com/mahasiswa.php?page=tiket'));
+$check('konfirmasi: memuat judul & lokasi', str_contains($bodyK, 'Workshop PHP') && str_contains($bodyK, 'Aula'));
+[, $bodyNoBase] = isi_email_konfirmasi('', 'Budi', $semEmail, 'ACD-1A2B3C');
+$check('konfirmasi: tanpa BASE_URL -> tautan dihilangkan', !str_contains($bodyNoBase, 'http'));
+[$subjH, $bodyH] = isi_email_h1('https://app.example.com', 'Budi', $semEmail);
+$check('H-1: TIDAK memuat kode tiket', !str_contains($bodyH, 'ACD-'));
+$check('H-1: TIDAK memuat link online', !str_contains($bodyH, 'meet.example.com'));
+$check('H-1: subjek tanpa CR/LF', !str_contains($subjH, "\r") && !str_contains($subjH, "\n"));
+$check('H-1: tautan app muncul', str_contains($bodyH, 'https://app.example.com/mahasiswa.php?page=tiket'));
+$semInjeksi = $semEmail;
+$semInjeksi['judul'] = "Judul\r\nBcc: evil@example.com";
+[$subjInj, $bodyInj] = isi_email_konfirmasi('https://app.example.com', "Nama\r\nBcc: evil@example.com", $semInjeksi, 'ACD-1A2B3C');
+$check('konfirmasi: subjek ber-CR/LF disanitasi (anti header injection)', !str_contains($subjInj, "\n") && !str_contains($subjInj, "\r"));
+$check('konfirmasi: nama ber-CR/LF disanitasi di isi', !str_contains(explode("\n", $bodyInj)[0], "\r"));
+$check('bersihkan_header buang CR/LF', bersihkan_header("a\r\nb") === 'a b');
+$semNonLatin = $semEmail;
+$semNonLatin['judul'] = 'Seminar Émoji 😀 & Sains';
+[$subjNL, $bodyNL] = isi_email_konfirmasi('', 'Ünïcode', $semNonLatin, 'ACD-FFFFFF');
+$check('konfirmasi: teks non-Latin utuh', str_contains($bodyNL, 'Émoji 😀') && str_contains($bodyNL, 'Ünïcode'));
+
+
 
 
 $_GET = ['p' => 1, 'q' => ''];

@@ -20,6 +20,8 @@ if (isset($_POST['update_profil'])) {
     $nim   = trim((string) ($_POST['nim'] ?? ''));
     $prodi = trim((string) ($_POST['prodi'] ?? ''));
     $email = trim((string) ($_POST['email'] ?? ''));
+    // Preferensi pengingat email: checkbox -> 1 bila dicentang, 0 bila tidak (hanya nilai 0/1 diterima).
+    $notif_email = (isset($_POST['notif_email']) && $_POST['notif_email'] === '1') ? 1 : 0;
 
     $row_now = mysqli_fetch_assoc(mysqli_query($conn, "SELECT prodi FROM users WHERE id_user = $id_user"));
     $prodi_lama = $row_now ? (string) $row_now['prodi'] : '';
@@ -49,12 +51,12 @@ if (isset($_POST['update_profil'])) {
 
         $old = mysqli_fetch_assoc(mysqli_query($conn, "SELECT foto FROM users WHERE id_user = $id_user"));
         $nim_simpan = $nim === '' ? null : $nim;
-        $sql = "UPDATE users SET nama_lengkap = ?, nim = ?, prodi = ?, email = ?" . ($new_foto ? ", foto = ?" : "") . " WHERE id_user = ?";
+        $sql = "UPDATE users SET nama_lengkap = ?, nim = ?, prodi = ?, email = ?, notif_email = ?" . ($new_foto ? ", foto = ?" : "") . " WHERE id_user = ?";
         $stmt = mysqli_prepare($conn, $sql);
         if ($new_foto) {
-            mysqli_stmt_bind_param($stmt, 'sssss' . 'i', $nama, $nim_simpan, $prodi, $email, $new_foto, $id_user);
+            mysqli_stmt_bind_param($stmt, 'ssssi' . 's' . 'i', $nama, $nim_simpan, $prodi, $email, $notif_email, $new_foto, $id_user);
         } else {
-            mysqli_stmt_bind_param($stmt, 'ssss' . 'i', $nama, $nim_simpan, $prodi, $email, $id_user);
+            mysqli_stmt_bind_param($stmt, 'ssssi' . 'i', $nama, $nim_simpan, $prodi, $email, $notif_email, $id_user);
         }
         $ok = mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
@@ -192,6 +194,9 @@ if (isset($_POST['daftar'])) {
         }
 
         mysqli_commit($conn);
+        // Best-effort: kirim konfirmasi setelah commit; kegagalan TIDAK menggagalkan pendaftaran.
+        require_once __DIR__ . '/services.php';
+        kirim_konfirmasi_pendaftaran($conn, $id_user, $sem, $kode);
         flash_set('success', 'Pendaftaran berhasil! Kode tiket: ' . $kode);
         redirect('mahasiswa.php?page=tiket');
     } catch (Throwable $ex) {
@@ -391,6 +396,15 @@ $count_aktif = (int) ($stat['aktif'] ?? 0);
                                             <input type="file" class="form-control" id="foto" name="foto" accept=".jpg,.jpeg,.png,.webp">
                                             <div class="form-text text-muted small">Maksimal 2MB. Format: JPG, PNG, atau WebP.</div>
                                         </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notif_email" name="notif_email" value="1" <?= (int) ($user['notif_email'] ?? 1) === 1 ? 'checked' : '' ?>>
+                                        <label class="form-check-label small text-secondary" for="notif_email">
+                                            Kirim pengingat seminar lewat email
+                                        </label>
+                                        <div class="form-text text-muted small">Email konfirmasi pendaftaran tetap dikirim.</div>
                                     </div>
                                 </div>
                             </div>
