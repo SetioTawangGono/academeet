@@ -47,8 +47,16 @@ mysql -u root academeet < migrasi.sql
 ```
 
 > **Penting:** `migrasi.sql` mengawali dengan `USE academeet;`, jadi selalu menargetkan database live meski dijalankan dengan nama DB lain. Untuk menguji di database salinan, hapus baris `USE` pada salinan sementara lalu jalankan `mysql -D <nama_db_salinan> < salinan.sql`.
+>
+> ```powershell
+> # Salin migrasi TANPA baris USE, lalu jalankan ke DB salinan (BUKAN live):
+> Get-Content migrasi.sql | Where-Object { $_ -notmatch '^\s*USE\s+academeet\s*;' } | Set-Content "$env:TEMP\migrasi_salinan.sql"
+> mysql -u root -D academeet_paketc_test < "$env:TEMP\migrasi_salinan.sql"
+> ```
+>
+> Tanpa langkah itu, `USE academeet;` akan mengalihkan sesi ke database **live** dan menerapkan migrasi ke sana walaupun argumen CLI menyebut DB salinan.
 
-Tabel: `users`, `pemateri`, `seminars`, `registrations`, `auth_throttle`, `password_resets`.
+Tabel: `users`, `pemateri`, `seminars`, `registrations`, `auth_throttle`, `password_resets` (maksimum 6 tabel; fitur baru sedapat mungkin menambah kolom/index pada tabel yang ada, bukan tabel baru).
 
 Batasan penting:
 - `registrations` punya `UNIQUE (id_user, id_seminar)` — satu mahasiswa satu tiket per seminar.
