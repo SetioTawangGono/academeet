@@ -105,6 +105,17 @@ if (isset($_POST['tambah'])) {
         if ($tanggal < date('Y-m-d')) {
             throw new RuntimeException('Tanggal seminar tidak boleh di masa lalu.');
         }
+        [$err_detail, $detail] = validasi_detail_seminar([
+            'jam_mulai'   => $_POST['jam_mulai'] ?? null,
+            'jam_selesai' => $_POST['jam_selesai'] ?? null,
+            'lokasi'      => $_POST['lokasi'] ?? null,
+            'link_online' => $_POST['link_online'] ?? null,
+            'kategori'    => $_POST['kategori'] ?? null,
+            'deskripsi'   => $_POST['deskripsi'] ?? null,
+        ]);
+        if ($err_detail !== '') {
+            throw new RuntimeException($err_detail);
+        }
         $stmt = mysqli_prepare($conn, "SELECT nama FROM pemateri WHERE id_pemateri = ? LIMIT 1");
         mysqli_stmt_bind_param($stmt, 'i', $id_pemateri);
         mysqli_stmt_execute($stmt);
@@ -117,8 +128,8 @@ if (isset($_POST['tambah'])) {
         $poster = upload_image($_FILES['poster'] ?? [], 'posters', 5000000);
         $nama_pemateri = $pmt['nama'];
         $status = 'Aktif';
-        $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, kuota, kuota_total, status, poster) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        mysqli_stmt_bind_param($stmt, 'sissiiss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $kuota, $kuota, $status, $poster);
+        $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi, kuota, kuota_total, status, poster) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, 'sississsssisss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $detail['jam_mulai'], $detail['jam_selesai'], $detail['lokasi'], $detail['link_online'], $detail['kategori'], $detail['deskripsi'], $kuota, $kuota, $status, $poster);
         if (!mysqli_stmt_execute($stmt)) {
             throw new RuntimeException('Gagal menyimpan seminar.');
         }
@@ -134,6 +145,12 @@ if (isset($_POST['tambah'])) {
             'id_pemateri' => (string) $id_pemateri,
             'tanggal' => $tanggal,
             'kuota' => (string) $kuota,
+            'jam_mulai' => (string) ($_POST['jam_mulai'] ?? ''),
+            'jam_selesai' => (string) ($_POST['jam_selesai'] ?? ''),
+            'lokasi' => (string) ($_POST['lokasi'] ?? ''),
+            'link_online' => (string) ($_POST['link_online'] ?? ''),
+            'kategori' => (string) ($_POST['kategori'] ?? ''),
+            'deskripsi' => (string) ($_POST['deskripsi'] ?? ''),
         ];
         flash_set('danger', $ex->getMessage());
     }
@@ -195,6 +212,17 @@ if (isset($_POST['edit_seminar'])) {
         if ($err !== '') {
             throw new RuntimeException($err);
         }
+        [$err_detail, $detail] = validasi_detail_seminar([
+            'jam_mulai'   => $_POST['jam_mulai'] ?? null,
+            'jam_selesai' => $_POST['jam_selesai'] ?? null,
+            'lokasi'      => $_POST['lokasi'] ?? null,
+            'link_online' => $_POST['link_online'] ?? null,
+            'kategori'    => $_POST['kategori'] ?? null,
+            'deskripsi'   => $_POST['deskripsi'] ?? null,
+        ]);
+        if ($err_detail !== '') {
+            throw new RuntimeException($err_detail);
+        }
 
         $poster_baru = upload_image($_FILES['poster'] ?? [], 'posters', 5000000);
 
@@ -203,6 +231,12 @@ if (isset($_POST['edit_seminar'])) {
             'id_pemateri' => $id_pemateri,
             'tanggal' => $tanggal,
             'kuota_total' => $kuota_total,
+            'jam_mulai' => $detail['jam_mulai'],
+            'jam_selesai' => $detail['jam_selesai'],
+            'lokasi' => $detail['lokasi'],
+            'link_online' => $detail['link_online'],
+            'kategori' => $detail['kategori'],
+            'deskripsi' => $detail['deskripsi'],
         ], $poster_baru);
 
         if ($type === 'success') {
@@ -223,6 +257,12 @@ if (isset($_POST['edit_seminar'])) {
             'id_pemateri' => (string) $id_pemateri,
             'tanggal' => $tanggal,
             'kuota_total' => (string) $kuota_total,
+            'jam_mulai' => (string) ($_POST['jam_mulai'] ?? ''),
+            'jam_selesai' => (string) ($_POST['jam_selesai'] ?? ''),
+            'lokasi' => (string) ($_POST['lokasi'] ?? ''),
+            'link_online' => (string) ($_POST['link_online'] ?? ''),
+            'kategori' => (string) ($_POST['kategori'] ?? ''),
+            'deskripsi' => (string) ($_POST['deskripsi'] ?? ''),
         ];
         flash_set('danger', $ex->getMessage());
     }
@@ -718,6 +758,7 @@ if (isset($_POST['reset_password'])) {
                                 <tr>
                                     <th scope="col">Poster</th>
                                     <th scope="col">Judul Seminar</th>
+                                    <th scope="col">Kategori</th>
                                     <th scope="col">Pemateri</th>
                                     <th scope="col">Tanggal</th>
                                     <th scope="col">Kuota (sisa/total)</th>
@@ -762,6 +803,15 @@ if (isset($_POST['reset_password'])) {
                                         $id_sem = (int) $row['id_seminar'];
                                         $judul_attr = e($row['judul']);
 
+                                        $kategori_row = (string) ($row['kategori'] ?? 'Umum');
+                                        $kategori_badge = "<span class='badge badge-soft-primary px-2 py-1 rounded-pill'>" . e($kategori_row) . "</span>";
+                                        $jam_row = '';
+                                        if (!empty($row['jam_mulai'])) {
+                                            $jm = substr((string) $row['jam_mulai'], 0, 5);
+                                            $js = !empty($row['jam_selesai']) ? '-' . substr((string) $row['jam_selesai'], 0, 5) : '';
+                                            $jam_row = " <span class='text-primary fw-semibold'>" . e($jm . $js) . "</span>";
+                                        }
+
                                         $aksi_selesai = $status_efektif === 'Aktif'
                                             ? "<button type='button' class='btn btn-sm btn-light-success fw-semibold js-selesai'
                                                 data-id='$id_sem' data-judul=\"$judul_attr\">
@@ -778,8 +828,9 @@ if (isset($_POST['reset_password'])) {
                                         echo "<tr>
                                                 <td><img src='" . e($img_src) . "' alt='Poster " . e($row['judul']) . "' class='rounded-3 shadow-sm border' width='80' height='50' loading='lazy' decoding='async' style='object-fit:cover;'></td>
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
+                                                <td>$kategori_badge</td>
                                                 <td class='text-secondary'>" . e($row['pemateri']) . "</td>
-                                                <td class='text-muted small'><i class='bi bi-clock me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "</td>
+                                                <td class='text-muted small'><i class='bi bi-calendar3 me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "$jam_row</td>
                                                 <td><span class='badge badge-soft-primary px-3 py-2 rounded-pill'>" . (int) $row['kuota'] . "/" . (int) ($row['kuota_total'] ?? $row['kuota']) . " Kursi</span></td>
                                                 <td>$status_badge</td>
                                                 <td class='text-center'>
@@ -796,7 +847,7 @@ if (isset($_POST['reset_password'])) {
                                               </tr>";
                                     }
                                 } else {
-                                    echo "<tr><td colspan='7' class='text-center py-4 text-muted'>" . ($ada_filter ? 'Tidak ada seminar yang cocok dengan filter/pencarian saat ini.' : 'Belum ada data seminar.') . "</td></tr>";
+                                    echo "<tr><td colspan='8' class='text-center py-4 text-muted'>" . ($ada_filter ? 'Tidak ada seminar yang cocok dengan filter/pencarian saat ini.' : 'Belum ada data seminar.') . "</td></tr>";
                                 }
                                 ?>
                             </tbody>
@@ -912,6 +963,36 @@ if (isset($_POST['reset_password'])) {
                                     <label for="tanggal" class="form-label small fw-semibold text-secondary">Tanggal Pelaksanaan</label>
                                     <input type="date" class="form-control" id="tanggal" name="tanggal" value="<?= e(old('tanggal')) ?>" min="<?= e(date('Y-m-d')) ?>" required>
                                 </div>
+                                <div class="col-lg-3">
+                                    <label for="jam_mulai" class="form-label small fw-semibold text-secondary">Jam Mulai</label>
+                                    <input type="time" class="form-control" id="jam_mulai" name="jam_mulai" value="<?= e(old('jam_mulai')) ?>">
+                                </div>
+                                <div class="col-lg-3">
+                                    <label for="jam_selesai" class="form-label small fw-semibold text-secondary">Jam Selesai</label>
+                                    <input type="time" class="form-control" id="jam_selesai" name="jam_selesai" value="<?= e(old('jam_selesai')) ?>">
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="kategori" class="form-label small fw-semibold text-secondary">Kategori</label>
+                                    <select class="form-select" id="kategori" name="kategori">
+                                        <?php foreach (kategori_seminar() as $kat): ?>
+                                            <option value="<?= e($kat) ?>" <?= old('kategori', 'Umum') === $kat ? 'selected' : '' ?>><?= e($kat) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="lokasi" class="form-label small fw-semibold text-secondary">Lokasi (opsional)</label>
+                                    <input type="text" class="form-control" id="lokasi" name="lokasi" maxlength="150" value="<?= e(old('lokasi')) ?>" placeholder="Contoh: Aula Gedung A / Zoom">
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="link_online" class="form-label small fw-semibold text-secondary">Link Online (opsional)</label>
+                                    <input type="url" class="form-control" id="link_online" name="link_online" maxlength="255" value="<?= e(old('link_online')) ?>" placeholder="https://...">
+                                    <div class="form-text text-muted small">Hanya terlihat oleh peserta yang terdaftar (di halaman tiket).</div>
+                                </div>
+                                <div class="col-12">
+                                    <label for="deskripsi" class="form-label small fw-semibold text-secondary">Deskripsi (opsional)</label>
+                                    <textarea class="form-control" id="deskripsi" name="deskripsi" rows="3" maxlength="2000" placeholder="Ringkasan acara, agenda, dsb."><?= e(old('deskripsi')) ?></textarea>
+                                    <div class="form-text text-muted small">Maksimal 2000 karakter.</div>
+                                </div>
                                 <div class="col-lg-6">
                                     <label for="kuota" class="form-label small fw-semibold text-secondary">Kuota Peserta</label>
                                     <input type="number" class="form-control" id="kuota" name="kuota" value="<?= e(old('kuota')) ?>" placeholder="Contoh: 100" min="1" inputmode="numeric" required>
@@ -942,6 +1023,9 @@ if (isset($_POST['reset_password'])) {
                     redirect('admin.php?page=dashboard');
                 }
                 $pendaftar_edit = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM registrations WHERE id_seminar = $id_edit"))['c'];
+                $jam_mulai_edit = substr((string) ($sem_edit['jam_mulai'] ?? ''), 0, 5);
+                $jam_selesai_edit = substr((string) ($sem_edit['jam_selesai'] ?? ''), 0, 5);
+                $kategori_edit = (string) ($sem_edit['kategori'] ?? 'Umum');
             ?>
                 <div class="card card-custom mb-4">
                     <div class="card-header bg-white border-bottom py-3 px-4">
@@ -981,6 +1065,36 @@ if (isset($_POST['reset_password'])) {
                                 <div class="col-lg-6">
                                     <label for="tanggal" class="form-label small fw-semibold text-secondary">Tanggal Pelaksanaan</label>
                                     <input type="date" class="form-control" id="tanggal" name="tanggal" value="<?= e(old('tanggal', (string) $sem_edit['tanggal'])) ?>" required>
+                                </div>
+                                <div class="col-lg-3">
+                                    <label for="jam_mulai" class="form-label small fw-semibold text-secondary">Jam Mulai</label>
+                                    <input type="time" class="form-control" id="jam_mulai" name="jam_mulai" value="<?= e(old('jam_mulai', $jam_mulai_edit)) ?>">
+                                </div>
+                                <div class="col-lg-3">
+                                    <label for="jam_selesai" class="form-label small fw-semibold text-secondary">Jam Selesai</label>
+                                    <input type="time" class="form-control" id="jam_selesai" name="jam_selesai" value="<?= e(old('jam_selesai', $jam_selesai_edit)) ?>">
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="kategori" class="form-label small fw-semibold text-secondary">Kategori</label>
+                                    <select class="form-select" id="kategori" name="kategori">
+                                        <?php foreach (kategori_seminar() as $kat): ?>
+                                            <option value="<?= e($kat) ?>" <?= old('kategori', $kategori_edit) === $kat ? 'selected' : '' ?>><?= e($kat) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="lokasi" class="form-label small fw-semibold text-secondary">Lokasi (opsional)</label>
+                                    <input type="text" class="form-control" id="lokasi" name="lokasi" maxlength="150" value="<?= e(old('lokasi', (string) ($sem_edit['lokasi'] ?? ''))) ?>" placeholder="Contoh: Aula Gedung A / Zoom">
+                                </div>
+                                <div class="col-lg-6">
+                                    <label for="link_online" class="form-label small fw-semibold text-secondary">Link Online (opsional)</label>
+                                    <input type="url" class="form-control" id="link_online" name="link_online" maxlength="255" value="<?= e(old('link_online', (string) ($sem_edit['link_online'] ?? ''))) ?>" placeholder="https://...">
+                                    <div class="form-text text-muted small">Hanya terlihat oleh peserta yang terdaftar (di halaman tiket).</div>
+                                </div>
+                                <div class="col-12">
+                                    <label for="deskripsi" class="form-label small fw-semibold text-secondary">Deskripsi (opsional)</label>
+                                    <textarea class="form-control" id="deskripsi" name="deskripsi" rows="3" maxlength="2000" placeholder="Ringkasan acara, agenda, dsb."><?= e(old('deskripsi', (string) ($sem_edit['deskripsi'] ?? ''))) ?></textarea>
+                                    <div class="form-text text-muted small">Maksimal 2000 karakter.</div>
                                 </div>
                                 <div class="col-lg-6">
                                     <label for="kuota_total" class="form-label small fw-semibold text-secondary">Kuota Total Peserta</label>

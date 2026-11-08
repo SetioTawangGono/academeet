@@ -95,6 +95,12 @@ function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poste
         $id_pemateri = (int) ($data['id_pemateri'] ?? 0);
         $tanggal = (string) ($data['tanggal'] ?? '');
         $kuota_total = (int) ($data['kuota_total'] ?? 0);
+        $jam_mulai = $data['jam_mulai'] ?? null;
+        $jam_selesai = $data['jam_selesai'] ?? null;
+        $lokasi = $data['lokasi'] ?? null;
+        $link_online = $data['link_online'] ?? null;
+        $kategori = (string) ($data['kategori'] ?? 'Umum');
+        $deskripsi = $data['deskripsi'] ?? null;
 
         if ($judul === '') {
             throw new RuntimeException('Judul seminar wajib diisi.');
@@ -131,11 +137,11 @@ function ubah_seminar(mysqli $conn, int $id_seminar, array $data, ?string $poste
         $sisa = $kuota_total - $pendaftar;
         $nama_pemateri = $pmt['nama'];
         if ($poster !== null) {
-            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, kuota_total = ?, kuota = ?, poster = ? WHERE id_seminar = ?");
-            mysqli_stmt_bind_param($stmt, 'sissiisi', $judul, $id_pemateri, $nama_pemateri, $tanggal, $kuota_total, $sisa, $poster, $id_seminar);
+            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, lokasi = ?, link_online = ?, kategori = ?, deskripsi = ?, kuota_total = ?, kuota = ?, poster = ? WHERE id_seminar = ?");
+            mysqli_stmt_bind_param($stmt, 'sississsssissi', $judul, $id_pemateri, $nama_pemateri, $tanggal, $jam_mulai, $jam_selesai, $lokasi, $link_online, $kategori, $deskripsi, $kuota_total, $sisa, $poster, $id_seminar);
         } else {
-            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, kuota_total = ?, kuota = ? WHERE id_seminar = ?");
-            mysqli_stmt_bind_param($stmt, 'sissiii', $judul, $id_pemateri, $nama_pemateri, $tanggal, $kuota_total, $sisa, $id_seminar);
+            $stmt = mysqli_prepare($conn, "UPDATE seminars SET judul = ?, id_pemateri = ?, pemateri = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, lokasi = ?, link_online = ?, kategori = ?, deskripsi = ?, kuota_total = ?, kuota = ? WHERE id_seminar = ?");
+            mysqli_stmt_bind_param($stmt, 'sississsssisi', $judul, $id_pemateri, $nama_pemateri, $tanggal, $jam_mulai, $jam_selesai, $lokasi, $link_online, $kategori, $deskripsi, $kuota_total, $sisa, $id_seminar);
         }
         if (!mysqli_stmt_execute($stmt)) {
             throw new RuntimeException('Gagal menyimpan perubahan seminar.');
