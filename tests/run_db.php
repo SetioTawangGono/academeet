@@ -44,11 +44,17 @@ function ins_user(mysqli $conn, string $nama, string $email): int
     return (int) $id;
 }
 
-function ins_seminar(mysqli $conn, string $judul, string $tanggal, int $kuota, string $status = 'Aktif'): int
+function ins_seminar(mysqli $conn, string $judul, string $tanggal, int $kuota, string $status = 'Aktif', array $detail = []): int
 {
     $pemateri = 'Tester';
-    $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, pemateri, tanggal, kuota, kuota_total, status) VALUES (?, ?, ?, ?, ?, ?)");
-    mysqli_stmt_bind_param($stmt, 'sssiss', $judul, $pemateri, $tanggal, $kuota, $kuota, $status);
+    $jam_mulai = $detail['jam_mulai'] ?? null;
+    $jam_selesai = $detail['jam_selesai'] ?? null;
+    $lokasi = $detail['lokasi'] ?? null;
+    $link_online = $detail['link_online'] ?? null;
+    $kategori = $detail['kategori'] ?? 'Umum';
+    $deskripsi = $detail['deskripsi'] ?? null;
+    $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, pemateri, tanggal, kuota, kuota_total, status, jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    mysqli_stmt_bind_param($stmt, 'sssissssssss', $judul, $pemateri, $tanggal, $kuota, $kuota, $status, $jam_mulai, $jam_selesai, $lokasi, $link_online, $kategori, $deskripsi);
     mysqli_stmt_execute($stmt);
     $id = mysqli_insert_id($conn);
     mysqli_stmt_close($stmt);
@@ -282,6 +288,66 @@ try {
     $tokShort = buat_token_reset($conn, $idA);
     [$t, ] = pakai_token_reset($conn, $tokShort, 'pendek');
     $check('reset password < 8 ditolak', $t === 'danger');
+
+    // ===== Paket C: detail seminar + validasi =====
+    // kategori default 'Umum' bila tidak diisi.
+    $idSemDefault = ins_seminar($conn, 'PaketC Default ' . $tag, $besok, 5);
+    $katDefault = (string) mysqli_fetch_assoc(mysqli_query($conn, "SELECT kategori FROM seminars WHERE id_seminar = $idSemDefault"))['kategori'];
+    $check('kategori default Umum', $katDefault === 'Umum');
+
+    // INSERT detail lengkap roundtrip.
+    $idSemDetail = ins_seminar($conn, 'PaketC Detail ' . $tag, $besok, 5, 'Aktif', [
+        'jam_mulai' => '09:00:00', 'jam_selesai' => '11:30:00', 'lokasi' => 'Aula C',
+        'link_online' => 'https://contoh.test/d', 'kategori' => 'Teknologi', 'deskripsi' => "Baris 1\nBaris 2",
+    ]);
+    $dRow = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi FROM seminars WHERE id_seminar = $idSemDetail"));
+    $check('detail roundtrip jam/lokasi/link/kategori', $dRow['jam_mulai'] === '09:00:00' && $dRow['jam_selesai'] === '11:30:00'
+        && $dRow['lokasi'] === 'Aula C' && $dRow['link_online'] === 'https://contoh.test/d' && $dRow['kategori'] === 'Teknologi');
+    $check('detail deskripsi multi-baris utuh', $dRow['deskripsi'] === "Baris 1\nBaris 2");
+
+    // validasi_detail_seminar: kategori tak dikenal & format jam salah ditolak.
+    [$e1, ] = validasi_detail_seminar(['kategori' => 'Ngawur']);
+    $check('validasi tolak kategori tak dikenal', $e1 !== '');
+    [$e2, ] = validasi_detail_seminar(['kategori' => 'Umum', 'jam_mulai' => '25:99']);
+    $check('validasi tolak jam tak valid', $e2 !== '');
+    [$e3, ] = validasi_detail_seminar(['kategori' => 'Umum', 'jam_mulai' => '09:00', 'jam_selesai' => '08:00']);
+    $check('validasi tolak selesai < mulai', $e3 !== '');
+    [$e4, $d4] = validasi_detail_seminar(['kategori' => 'Riset', 'link_online' => 'javascript:alert(1)']);
+    $check('validasi tolak link_online bukan http(s)', $e4 !== '');
+    [$e5, $d5] = validasi_detail_seminar(['kategori' => 'Soft Skill', 'jam_mulai' => '', 'jam_selesai' => '', 'lokasi' => '  ', 'deskripsi' => '  ']);
+    $check('validasi sukses & kosong jadi null', $e5 === '' && $d5['jam_mulai'] === null && $d5['lokasi'] === null && $d5['kategori'] === 'Soft Skill');
+
+    // ubah_seminar menyimpan & mengosongkan detail.
+    [$t, ] = ubah_seminar($conn, $idSemDetail, [
+        'judul' => 'PaketC Detail Baru ' . $tag, 'id_pemateri' => $idPemateri, 'tanggal' => $besok, 'kuota_total' => 8,
+        'jam_mulai' => '10:00', 'jam_selesai' => '', 'lokasi' => 'Ruang 2', 'link_online' => '', 'kategori' => 'Karier', 'deskripsi' => '',
+    ]);
+    $uRow = mysqli_fetch_assoc(mysqli_query($conn, "SELECT jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi FROM seminars WHERE id_seminar = $idSemDetail"));
+    $check('ubah_seminar simpan detail baru', $t === 'success' && $uRow['jam_mulai'] === '10:00:00' && $uRow['lokasi'] === 'Ruang 2' && $uRow['kategori'] === 'Karier');
+    $check('ubah_seminar kosongkan detail', $uRow['jam_selesai'] === null && $uRow['link_online'] === null && $uRow['deskripsi'] === null);
+
+    // ===== Paket C: ambil_data_ics owner-only =====
+    $idRegIcs = ins_reg($conn, $idUser, $idSemDetail, 'Belum Hadir', 'T-' . $tag . 'ICS');
+    $icsRow = ambil_data_ics($conn, $idUser, $idRegIcs);
+    $check('ambil_data_ics pemilik dapat data', $icsRow !== null && (int) $icsRow['id_registrasi'] === $idRegIcs);
+    $check('ambil_data_ics user lain null', ambil_data_ics($conn, $idUserLain, $idRegIcs) === null);
+    $check('ambil_data_ics id_registrasi 0 null', ambil_data_ics($conn, $idUser, 0) === null);
+    $icsStr = buat_ics($icsRow, gmdate('Ymd\THis\Z'));
+    $check('buat_ics hasil valid', strpos($icsStr, 'BEGIN:VCALENDAR') !== false && strpos($icsStr, 'END:VCALENDAR') !== false && strpos($icsStr, 'UID:registrasi-' . $idRegIcs . '@academeet') !== false);
+
+    // ===== Paket C: filter katalog (normalisasi murni) =====
+    $fk = normalisasi_filter_katalog(['q' => '  AI ', 'kat' => 'Teknologi', 'sedia' => 'tersedia', 'p' => '3']);
+    $check('filter: q trim', $fk['q'] === 'AI');
+    $check('filter: kat valid dipertahankan', $fk['kat'] === 'Teknologi');
+    $check('filter: sedia valid', $fk['sedia'] === 'tersedia');
+    $check('filter: p valid', $fk['p'] === 3);
+    $fk2 = normalisasi_filter_katalog(['kat' => 'Ngawur', 'sedia' => 'ngawur', 'p' => '99999999999999999999']);
+    $check('filter: kat invalid → default kosong', $fk2['kat'] === '');
+    $check('filter: sedia invalid → semua', $fk2['sedia'] === 'semua');
+    $fk3 = normalisasi_filter_katalog(['dari' => '2027-01-01', 'sampai' => '2026-01-01']);
+    $check('filter: dari>sampai ditukar', $fk3['dari'] === '2026-01-01' && $fk3['sampai'] === '2027-01-01');
+    $fk4 = normalisasi_filter_katalog(['dari' => '2027-02-30']);
+    $check('filter: tanggal tak valid → kosong', $fk4['dari'] === '');
 } catch (Throwable $ex) {
     $failed++;
     echo "FAIL: exception " . $ex->getMessage() . "\n";

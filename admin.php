@@ -129,7 +129,7 @@ if (isset($_POST['tambah'])) {
         $nama_pemateri = $pmt['nama'];
         $status = 'Aktif';
         $stmt = mysqli_prepare($conn, "INSERT INTO seminars (judul, id_pemateri, pemateri, tanggal, jam_mulai, jam_selesai, lokasi, link_online, kategori, deskripsi, kuota, kuota_total, status, poster) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        mysqli_stmt_bind_param($stmt, 'sississsssisss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $detail['jam_mulai'], $detail['jam_selesai'], $detail['lokasi'], $detail['link_online'], $detail['kategori'], $detail['deskripsi'], $kuota, $kuota, $status, $poster);
+        mysqli_stmt_bind_param($stmt, 'sissssssssiiss', $judul, $id_pemateri, $nama_pemateri, $tanggal, $detail['jam_mulai'], $detail['jam_selesai'], $detail['lokasi'], $detail['link_online'], $detail['kategori'], $detail['deskripsi'], $kuota, $kuota, $status, $poster);
         if (!mysqli_stmt_execute($stmt)) {
             throw new RuntimeException('Gagal menyimpan seminar.');
         }
