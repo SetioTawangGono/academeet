@@ -29,7 +29,7 @@ if ($role_aktif === 'panitia') {
         http_response_code(403);
         echo '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Akses Ditolak - AcadeMeet</title>'
             . '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">'
-            . '<link rel="stylesheet" href="style.css?v=2.15"></head><body class="auth-wrapper">'
+            . '<link rel="stylesheet" href="style.css?v=2.16"></head><body class="auth-wrapper">'
             . '<div class="container text-center"><div class="auth-card p-4 p-sm-5 mx-auto" style="max-width:480px;">'
             . '<div class="auth-brand-icon mx-auto mb-3"><i class="bi bi-shield-exclamation"></i></div>'
             . '<h1 class="h4 fw-bold text-dark mb-2">Akses ditolak</h1>'
@@ -730,7 +730,7 @@ if (isset($_POST['impor_terapkan'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.15">
+    <link rel="stylesheet" href="style.css?v=2.16">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -967,7 +967,7 @@ if (isset($_POST['impor_terapkan'])) {
                 </div>
 
                 <!-- Tabel Seminar Aktif -->
-                <div class="card card-custom card-static overflow-hidden">
+                <div id="daftar-seminar" class="card card-custom card-static overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Daftar Seminar</h6>
                         <div class="admin-toolbar">
@@ -983,12 +983,12 @@ if (isset($_POST['impor_terapkan'])) {
                             $q_dashboard = is_string($_GET['q'] ?? null) ? trim($_GET['q']) : '';
                             $filter_aktif = $f_status !== '' || $f_tanggal !== '';
                             ?>
-                            <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 220px;" role="search">
+                            <form method="get" action="admin.php#daftar-seminar" class="input-group input-group-sm" style="width: 220px;" role="search">
                                 <input type="hidden" name="page" value="dashboard">
                                 <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
                                 <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q_dashboard) ?>" placeholder="Cari seminar..." aria-label="Cari seminar">
                             </form>
-                            <form method="get" action="admin.php" class="d-flex align-items-center gap-2 flex-wrap">
+                            <form method="get" action="admin.php#daftar-seminar" class="d-flex align-items-center gap-2 flex-wrap">
                                 <input type="hidden" name="page" value="dashboard">
                                 <?php if ($q_dashboard !== ''): ?>
                                     <input type="hidden" name="q" value="<?= e($q_dashboard) ?>">
@@ -1003,7 +1003,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 <input type="date" name="f_tanggal" id="f_tanggal" class="form-control form-control-sm" style="width: 150px;" value="<?= e($f_tanggal) ?>">
                                 <button type="submit" class="btn btn-sm btn-light-primary fw-semibold">Filter</button>
                                 <?php if ($filter_aktif): ?>
-                                    <a href="?page=dashboard<?= $q_dashboard !== '' ? '&q=' . e(urlencode($q_dashboard)) : '' ?>" class="btn btn-sm btn-light fw-semibold">Reset filter</a>
+                                    <a href="admin.php?page=dashboard<?= $q_dashboard !== '' ? '&q=' . e(urlencode($q_dashboard)) : '' ?>#daftar-seminar" class="btn btn-sm btn-light fw-semibold">Reset filter</a>
                                 <?php endif; ?>
                             </form>
                             <a href="?page=tambah" class="btn btn-sm btn-primary">
@@ -1065,11 +1065,11 @@ if (isset($_POST['impor_terapkan'])) {
 
                                         $kategori_row = (string) ($row['kategori'] ?? 'Umum');
                                         $kategori_badge = "<span class='badge badge-soft-primary px-2 py-1 rounded-pill'>" . e($kategori_row) . "</span>";
-                                        $jam_row = '';
+                                        $jam_disp = '';
                                         if (!empty($row['jam_mulai'])) {
                                             $jm = substr((string) $row['jam_mulai'], 0, 5);
-                                            $js = !empty($row['jam_selesai']) ? '-' . substr((string) $row['jam_selesai'], 0, 5) : '';
-                                            $jam_row = " <span class='text-primary fw-semibold'>" . e($jm . $js) . "</span>";
+                                            $js = !empty($row['jam_selesai']) ? ' – ' . substr((string) $row['jam_selesai'], 0, 5) : '';
+                                            $jam_disp = $jm . $js;
                                         }
 
                                         $aksi_selesai = $status_efektif === 'Aktif'
@@ -1094,7 +1094,7 @@ if (isset($_POST['impor_terapkan'])) {
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
                                                 <td>$kategori_badge</td>
                                                 <td class='text-secondary'>" . e($row['pemateri']) . "</td>
-                                                <td class='text-muted small'><i class='bi bi-calendar3 me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "$jam_row</td>
+                                                <td class='col-waktu'><div class='waktu-tgl'><i class='bi bi-calendar3 me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "</div>" . ($jam_disp !== '' ? "<div class='waktu-jam'>" . e($jam_disp) . "</div>" : '') . "</td>
                                                 <td><span class='badge badge-soft-primary px-3 py-2 rounded-pill'>" . (int) $row['kuota'] . "/" . (int) ($row['kuota_total'] ?? $row['kuota']) . " Kursi</span></td>
                                                 <td>$status_badge</td>
                                                 <td class='text-center'>

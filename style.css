@@ -485,6 +485,12 @@ html:not([data-bs-theme="dark"]) .filter-bar .input-group-text {
 /* Toolbar kartu admin: cari + filter + aksi utama, tinggi seragam */
 .admin-content { display: flex; flex-direction: column; gap: 1rem; }
 .admin-content > * { margin-bottom: 0; }
+/* Anchor kartu Daftar Seminar: offset tinggi topbar sticky (~60px + margin) */
+#daftar-seminar { scroll-margin-top: 90px; }
+/* Kolom Tanggal tabel seminar: tanggal di atas, jam di bawah */
+.col-waktu { white-space: nowrap; min-width: 150px; }
+.waktu-tgl { font-weight: 600; }
+.waktu-jam { font-size: .85rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .admin-toolbar {
     display: flex;
     flex-wrap: wrap;
