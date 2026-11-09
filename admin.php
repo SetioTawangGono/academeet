@@ -177,7 +177,7 @@ if (isset($_POST['tambah'])) {
         }
         mysqli_stmt_close($stmt);
         flash_set('success', 'Seminar baru berhasil ditambahkan.');
-        $tujuan = 'admin.php?page=dashboard';
+        $tujuan = 'admin.php?page=dashboard#daftar-seminar';
     } catch (Throwable $ex) {
         if ($poster && file_exists("uploads/posters/" . $poster)) {
             @unlink("uploads/posters/" . $poster);
@@ -290,7 +290,7 @@ if (isset($_POST['edit_seminar'])) {
                 @unlink("uploads/posters/" . $poster_lama);
             }
             flash_set('success', $message);
-            $tujuan = 'admin.php?page=dashboard';
+            $tujuan = 'admin.php?page=dashboard#daftar-seminar';
         } else {
             throw new RuntimeException($message);
         }
