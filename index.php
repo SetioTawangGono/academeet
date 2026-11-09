@@ -104,7 +104,7 @@ if (isset($_POST['login'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.14">
+    <link rel="stylesheet" href="style.css?v=2.15">
 </head>
 <body class="auth-wrapper">
 <?= theme_toggle_button('theme-toggle--floating') ?>
