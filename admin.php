@@ -967,7 +967,7 @@ if (isset($_POST['impor_terapkan'])) {
                 </div>
 
                 <!-- Tabel Seminar Aktif -->
-                <div class="card card-custom card-static overflow-hidden">
+                <div id="daftar-seminar" class="card card-custom card-static overflow-hidden">
                     <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h6 class="fw-bold mb-0 text-dark">Daftar Seminar</h6>
                         <div class="admin-toolbar">
@@ -983,12 +983,12 @@ if (isset($_POST['impor_terapkan'])) {
                             $q_dashboard = is_string($_GET['q'] ?? null) ? trim($_GET['q']) : '';
                             $filter_aktif = $f_status !== '' || $f_tanggal !== '';
                             ?>
-                            <form method="get" action="admin.php" class="input-group input-group-sm" style="width: 220px;" role="search">
+                            <form method="get" action="admin.php#daftar-seminar" class="input-group input-group-sm" style="width: 220px;" role="search">
                                 <input type="hidden" name="page" value="dashboard">
                                 <button type="submit" class="input-group-text bg-white border-end-0 text-muted" aria-label="Cari"><i class="bi bi-search"></i></button>
                                 <input type="search" name="q" class="form-control border-start-0 ps-0" value="<?= e($q_dashboard) ?>" placeholder="Cari seminar..." aria-label="Cari seminar">
                             </form>
-                            <form method="get" action="admin.php" class="d-flex align-items-center gap-2 flex-wrap">
+                            <form method="get" action="admin.php#daftar-seminar" class="d-flex align-items-center gap-2 flex-wrap">
                                 <input type="hidden" name="page" value="dashboard">
                                 <?php if ($q_dashboard !== ''): ?>
                                     <input type="hidden" name="q" value="<?= e($q_dashboard) ?>">
@@ -1003,7 +1003,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 <input type="date" name="f_tanggal" id="f_tanggal" class="form-control form-control-sm" style="width: 150px;" value="<?= e($f_tanggal) ?>">
                                 <button type="submit" class="btn btn-sm btn-light-primary fw-semibold">Filter</button>
                                 <?php if ($filter_aktif): ?>
-                                    <a href="?page=dashboard<?= $q_dashboard !== '' ? '&q=' . e(urlencode($q_dashboard)) : '' ?>" class="btn btn-sm btn-light fw-semibold">Reset filter</a>
+                                    <a href="?page=dashboard<?= $q_dashboard !== '' ? '&q=' . e(urlencode($q_dashboard)) : '' ?>#daftar-seminar" class="btn btn-sm btn-light fw-semibold">Reset filter</a>
                                 <?php endif; ?>
                             </form>
                             <a href="?page=tambah" class="btn btn-sm btn-primary">
