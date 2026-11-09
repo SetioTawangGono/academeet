@@ -1065,11 +1065,11 @@ if (isset($_POST['impor_terapkan'])) {
 
                                         $kategori_row = (string) ($row['kategori'] ?? 'Umum');
                                         $kategori_badge = "<span class='badge badge-soft-primary px-2 py-1 rounded-pill'>" . e($kategori_row) . "</span>";
-                                        $jam_row = '';
+                                        $jam_disp = '';
                                         if (!empty($row['jam_mulai'])) {
                                             $jm = substr((string) $row['jam_mulai'], 0, 5);
-                                            $js = !empty($row['jam_selesai']) ? '-' . substr((string) $row['jam_selesai'], 0, 5) : '';
-                                            $jam_row = " <span class='text-primary fw-semibold'>" . e($jm . $js) . "</span>";
+                                            $js = !empty($row['jam_selesai']) ? ' – ' . substr((string) $row['jam_selesai'], 0, 5) : '';
+                                            $jam_disp = $jm . $js;
                                         }
 
                                         $aksi_selesai = $status_efektif === 'Aktif'
@@ -1094,7 +1094,7 @@ if (isset($_POST['impor_terapkan'])) {
                                                 <td><span class='fw-semibold text-dark'>" . e($row['judul']) . "</span></td>
                                                 <td>$kategori_badge</td>
                                                 <td class='text-secondary'>" . e($row['pemateri']) . "</td>
-                                                <td class='text-muted small'><i class='bi bi-calendar3 me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "$jam_row</td>
+                                                <td class='col-waktu'><div class='waktu-tgl'><i class='bi bi-calendar3 me-1'></i>" . e(date('d M Y', strtotime($row['tanggal']))) . "</div>" . ($jam_disp !== '' ? "<div class='waktu-jam'>" . e($jam_disp) . "</div>" : '') . "</td>
                                                 <td><span class='badge badge-soft-primary px-3 py-2 rounded-pill'>" . (int) $row['kuota'] . "/" . (int) ($row['kuota_total'] ?? $row['kuota']) . " Kursi</span></td>
                                                 <td>$status_badge</td>
                                                 <td class='text-center'>
