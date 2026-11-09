@@ -1280,7 +1280,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 </div>
                             </div>
                             <div class="mt-4 pt-3 border-top d-flex justify-content-end gap-2">
-                                <a href="admin.php?page=dashboard" class="btn btn-light fw-semibold px-4">Batal</a>
+                                <a href="admin.php?page=dashboard#daftar-seminar" class="btn btn-light fw-semibold px-4">Batal</a>
                                 <button type="submit" name="tambah" class="btn btn-primary px-4">
                                     <i class="bi bi-cloud-arrow-up me-1"></i> Publikasikan Seminar
                                 </button>
@@ -1397,7 +1397,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 </div>
                             </div>
                             <div class="mt-4 pt-3 border-top d-flex justify-content-end gap-2">
-                                <a href="admin.php?page=dashboard" class="btn btn-light fw-semibold px-4">Batal</a>
+                                <a href="admin.php?page=dashboard#daftar-seminar" class="btn btn-light fw-semibold px-4">Batal</a>
                                 <button type="submit" name="edit_seminar" class="btn btn-primary px-4">
                                     <i class="bi bi-save me-1"></i> Simpan Perubahan
                                 </button>
