@@ -980,7 +980,8 @@ function pagination_html(int $total, int $page, int $perPage): string
     $link = static function (int $n): string {
         $qs = $_GET;
         $qs['p'] = $n;
-        // Anchor hanya untuk dashboard admin (kartu Daftar Seminar), jangan halaman lain.
+        // Anchor hanya untuk dashboard admin (kartu Daftar Seminar).
+        // Cek eksplisit: halaman lain (mis. mahasiswa.php) tak punya key 'page', jangan kena hash.
         $hash = (($qs['page'] ?? '') === 'dashboard') ? '#daftar-seminar' : '';
         return '?' . http_build_query($qs) . $hash;
     };
