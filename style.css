@@ -279,6 +279,8 @@ button.btn-glass:hover,
 
 /* Glassmorphism Cards - Style Formula dari Proyek MusicPlaylist */
 .card-custom {
+    /* Kompensasi alpha tidak dipakai: pengukuran menunjukkan alpha asli (--glass-bg)
+       memberi diff terendah; perubahan alpha justru memperbesar selisih (lihat laporan). */
     background: var(--glass-bg);
     border-radius: var(--radius-lg);
     border: 1px solid var(--glass-border);
