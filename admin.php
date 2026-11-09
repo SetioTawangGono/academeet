@@ -29,7 +29,7 @@ if ($role_aktif === 'panitia') {
         http_response_code(403);
         echo '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Akses Ditolak - AcadeMeet</title>'
             . '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">'
-            . '<link rel="stylesheet" href="style.css?v=2.16"></head><body class="auth-wrapper">'
+            . '<link rel="stylesheet" href="style.css?v=2.17"></head><body class="auth-wrapper">'
             . '<div class="container text-center"><div class="auth-card p-4 p-sm-5 mx-auto" style="max-width:480px;">'
             . '<div class="auth-brand-icon mx-auto mb-3"><i class="bi bi-shield-exclamation"></i></div>'
             . '<h1 class="h4 fw-bold text-dark mb-2">Akses ditolak</h1>'
@@ -730,7 +730,7 @@ if (isset($_POST['impor_terapkan'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.16">
+    <link rel="stylesheet" href="style.css?v=2.17">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
