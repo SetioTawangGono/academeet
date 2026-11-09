@@ -29,7 +29,7 @@ if ($role_aktif === 'panitia') {
         http_response_code(403);
         echo '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Akses Ditolak - AcadeMeet</title>'
             . '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">'
-            . '<link rel="stylesheet" href="style.css?v=2.16"></head><body class="auth-wrapper">'
+            . '<link rel="stylesheet" href="style.css?v=2.17"></head><body class="auth-wrapper">'
             . '<div class="container text-center"><div class="auth-card p-4 p-sm-5 mx-auto" style="max-width:480px;">'
             . '<div class="auth-brand-icon mx-auto mb-3"><i class="bi bi-shield-exclamation"></i></div>'
             . '<h1 class="h4 fw-bold text-dark mb-2">Akses ditolak</h1>'
@@ -177,7 +177,7 @@ if (isset($_POST['tambah'])) {
         }
         mysqli_stmt_close($stmt);
         flash_set('success', 'Seminar baru berhasil ditambahkan.');
-        $tujuan = 'admin.php?page=dashboard';
+        $tujuan = 'admin.php?page=dashboard#daftar-seminar';
     } catch (Throwable $ex) {
         if ($poster && file_exists("uploads/posters/" . $poster)) {
             @unlink("uploads/posters/" . $poster);
@@ -212,7 +212,7 @@ if (isset($_POST['selesai'])) {
     $ok = mysqli_stmt_execute($stmt);
     mysqli_stmt_close($stmt);
     flash_set($ok ? 'success' : 'danger', $ok ? 'Seminar ditandai sebagai selesai.' : 'Gagal mengubah status seminar.');
-    redirect('admin.php?page=dashboard');
+    redirect('admin.php?page=dashboard#daftar-seminar');
 }
 
 // ==========================================
@@ -290,7 +290,7 @@ if (isset($_POST['edit_seminar'])) {
                 @unlink("uploads/posters/" . $poster_lama);
             }
             flash_set('success', $message);
-            $tujuan = 'admin.php?page=dashboard';
+            $tujuan = 'admin.php?page=dashboard#daftar-seminar';
         } else {
             throw new RuntimeException($message);
         }
@@ -370,7 +370,7 @@ if (isset($_POST['hapus'])) {
         mysqli_rollback($conn);
         flash_set('danger', $ex->getMessage());
     }
-    redirect('admin.php?page=dashboard');
+    redirect('admin.php?page=dashboard#daftar-seminar');
 }
 
 // ==========================================
@@ -730,7 +730,7 @@ if (isset($_POST['impor_terapkan'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <?= theme_boot_script() ?>
-    <link rel="stylesheet" href="style.css?v=2.16">
+    <link rel="stylesheet" href="style.css?v=2.17">
 </head>
 <body>
 <a href="#konten" class="skip-link">Lewati ke konten utama</a>
@@ -1280,7 +1280,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 </div>
                             </div>
                             <div class="mt-4 pt-3 border-top d-flex justify-content-end gap-2">
-                                <a href="admin.php?page=dashboard" class="btn btn-light fw-semibold px-4">Batal</a>
+                                <a href="admin.php?page=dashboard#daftar-seminar" class="btn btn-light fw-semibold px-4">Batal</a>
                                 <button type="submit" name="tambah" class="btn btn-primary px-4">
                                     <i class="bi bi-cloud-arrow-up me-1"></i> Publikasikan Seminar
                                 </button>
@@ -1397,7 +1397,7 @@ if (isset($_POST['impor_terapkan'])) {
                                 </div>
                             </div>
                             <div class="mt-4 pt-3 border-top d-flex justify-content-end gap-2">
-                                <a href="admin.php?page=dashboard" class="btn btn-light fw-semibold px-4">Batal</a>
+                                <a href="admin.php?page=dashboard#daftar-seminar" class="btn btn-light fw-semibold px-4">Batal</a>
                                 <button type="submit" name="edit_seminar" class="btn btn-primary px-4">
                                     <i class="bi bi-save me-1"></i> Simpan Perubahan
                                 </button>
