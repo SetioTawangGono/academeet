@@ -212,7 +212,7 @@ if (isset($_POST['selesai'])) {
     $ok = mysqli_stmt_execute($stmt);
     mysqli_stmt_close($stmt);
     flash_set($ok ? 'success' : 'danger', $ok ? 'Seminar ditandai sebagai selesai.' : 'Gagal mengubah status seminar.');
-    redirect('admin.php?page=dashboard');
+    redirect('admin.php?page=dashboard#daftar-seminar');
 }
 
 // ==========================================
@@ -370,7 +370,7 @@ if (isset($_POST['hapus'])) {
         mysqli_rollback($conn);
         flash_set('danger', $ex->getMessage());
     }
-    redirect('admin.php?page=dashboard');
+    redirect('admin.php?page=dashboard#daftar-seminar');
 }
 
 // ==========================================
