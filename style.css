@@ -283,8 +283,8 @@ button.btn-glass:hover,
     border-radius: var(--radius-lg);
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+    /* backdrop-filter dihapus: blur di belakang kartu yang bergulir adalah biaya repaint terbesar
+       (terbukti: hapus blur .card-custom/.stat-card menurunkan median frame ~48% di 1440px). */
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
     color: var(--text-main);
     position: relative;
@@ -531,8 +531,7 @@ html:not([data-bs-theme="dark"]) .filter-bar .input-group-text {
 
 .auth-card {
     background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+    /* backdrop-filter dihapus: lihat .card-custom. Latar auth statis, blur tak terlihat. */
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
     border-radius: var(--radius-xl);
@@ -773,8 +772,7 @@ html:not([data-bs-theme="dark"]) .filter-bar .input-group-text {
 /* Stat Cards - Clean Dashboard KPI Style */
 .stat-card {
     background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+    /* backdrop-filter dihapus: lihat .card-custom. */
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
     border-radius: var(--radius-lg);
